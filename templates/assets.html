@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Assets — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Assets <span class="muted" style="font-family: 'Source Sans 3', sans-serif; font-size: 1rem;">({{ assets.len() }})</span></h1>
+    <a href="/data?tab=assets" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Chain</th>
+            <th>Risk</th>
+            <th class="r">Target %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in assets %}
+        <tr>
+            <td class="name" style="font-family: 'IBM Plex Mono', monospace;">{{ a.symbol }}</td>
+            <td class="label">{{ a.name.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">{{ a.type_code }}</td>
+            <td class="label">{{ a.chain_code.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">
+                {% match a.risk_code %}
+                    {% when Some with (r) %}
+                        {% if r == "cat1_safe" %}<span class="risk-safe">Safe</span>
+                        {% else if r == "cat2_medium" %}<span class="risk-medium">Medium</span>
+                        {% else if r == "cat3_high" %}<span class="risk-high">High</span>
+                        {% else %}{{ r }}{% endif %}
+                    {% when None %}&mdash;
+                {% endmatch %}
+            </td>
+            <td class="r">
+                {% match a.target_pct %}
+                    {% when Some with (v) %}{{ "{:.1}"|format(v * 100.0) }}%
+                    {% when None %}&mdash;
+                {% endmatch %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

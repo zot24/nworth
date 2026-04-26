@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide — Portfolio Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script>if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');</script>
+    <style>
+        html { -webkit-font-smoothing: antialiased; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #fff; --bg-sidebar: #fafafa; --bg-code: #f5f5f5; --bg-pre: #f8f8f8;
+            --text: #111; --text-body: #444; --text-muted: #999; --text-link: #666;
+            --border: #eee; --border-strong: #111;
+            --note-bg: #fffbe6; --note-border: #d97706;
+            --tip-bg: #f0fdf4; --tip-border: #1a7f4b;
+        }
+        html.dark {
+            --bg: #0a0a0c; --bg-sidebar: #0e0e11; --bg-code: #1a1a1f; --bg-pre: #131316;
+            --text: #e4e4e7; --text-body: #a1a1aa; --text-muted: #52525b; --text-link: #71717a;
+            --border: #1e1e22; --border-strong: #52525b;
+            --note-bg: #1a1708; --note-border: #d97706;
+            --tip-bg: #0a1a0f; --tip-border: #1a7f4b;
+        }
+
+        body { font-family: 'Source Sans 3', sans-serif; color: var(--text-body); background: var(--bg); line-height: 1.7; }
+
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 260px; flex-shrink: 0; padding: 2rem 1.5rem;
+            border-right: 1px solid var(--border); background: var(--bg-sidebar);
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+        }
+        .content { flex: 1; max-width: 720px; padding: 2.5rem 3rem 5rem; }
+
+        .sidebar-title { font-family: 'Libre Baskerville', serif; font-size: 0.9375rem; color: var(--text); margin-bottom: 2rem; }
+        .sidebar-title a { color: var(--text); text-decoration: none; }
+        .sidebar-group { margin-bottom: 1.5rem; }
+        .sidebar-group-label { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .sidebar a { display: block; padding: 4px 0; font-size: 0.8125rem; color: var(--text-link); text-decoration: none; }
+        .sidebar a:hover { color: var(--text); }
+
+        h1 { font-family: 'Libre Baskerville', serif; font-size: 1.75rem; font-weight: 400; color: var(--text); margin-bottom: 0.5rem; }
+        h2 { font-family: 'Libre Baskerville', serif; font-size: 1.25rem; font-weight: 400; color: var(--text); margin-top: 3rem; margin-bottom: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+        h3 { font-family: 'Source Sans 3', sans-serif; font-size: 0.9375rem; font-weight: 600; color: var(--text); margin-top: 2rem; margin-bottom: 0.5rem; }
+        p { margin-bottom: 1rem; }
+        code { font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; background: var(--bg-code); color: var(--text); padding: 2px 5px; border-radius: 2px; }
+        pre { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; background: var(--bg-pre); color: var(--text-body); padding: 1rem; border-radius: 3px; overflow-x: auto; margin-bottom: 1rem; line-height: 1.5; border: 1px solid var(--border); }
+        ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+        li { margin-bottom: 0.35rem; }
+        strong { color: var(--text); }
+        a { color: var(--text-link); }
+        a:hover { color: var(--text); }
+        table.doc { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.8125rem; }
+        table.doc th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border-strong); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        table.doc td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        table.doc td code { font-size: 0.75rem; }
+        .note { background: var(--note-bg); border-left: 3px solid var(--note-border); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; }
+        .tip { background: var(--tip-bg); border-left: 3px solid var(--tip-border); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; }
+        a.back { font-size: 0.8125rem; color: var(--text-link); text-decoration: none; }
+        a.back:hover { color: var(--text); }
+
+        .theme-btn {
+            font-family: 'Source Sans 3', sans-serif; font-size: 0.75rem;
+            color: var(--text-muted); cursor: pointer; background: none; border: none; padding: 0;
+        }
+        .theme-btn:hover { color: var(--text); }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-title"><a href="/">Portfolio Tracker</a></div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Getting Started</div>
+            <a href="#overview">Overview</a>
+            <a href="#concepts">Key Concepts</a>
+            <a href="#first-steps">First Steps</a>
+        </div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Pages</div>
+            <a href="#dashboard">Action Center (Home)</a>
+            <a href="#wealth">Wealth (Holdings)</a>
+            <a href="#stocks">Stocks</a>
+            <a href="#crypto">Crypto</a>
+            <a href="#cash">Cash & Stables</a>
+            <a href="#positions">Positions</a>
+            <a href="#income">Income</a>
+            <a href="#expenses">Expenses</a>
+            <a href="#flow">Money Flow</a>
+            <a href="#accounts">Accounts</a>
+            <a href="#assets">Assets</a>
+            <a href="#targets">Allocation Targets</a>
+            <a href="#data">Data Editor</a>
+        </div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Concepts</div>
+            <a href="#sentiment">Market Sentiment</a>
+            <a href="#dynamic-targets">Dynamic Targets</a>
+        </div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Editing Data</div>
+            <a href="#edit-vs-view">Edit vs View</a>
+            <a href="#data-tabs">Data tabs</a>
+            <a href="#deleting-records">Smart delete</a>
+        </div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Tools</div>
+            <a href="#pricefeed">Pricefeed</a>
+            <a href="#snapshots">Snapshots</a>
+            <a href="#cli">CLI</a>
+            <a href="#rest-api">REST API</a>
+            <a href="#theme">Theme</a>
+        </div>
+
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">Reference</div>
+            <a href="#account-types">Account Types</a>
+            <a href="#asset-types">Asset Types</a>
+            <a href="#risk-categories">Risk Categories</a>
+            <a href="#chains">Chains</a>
+        </div>
+
+        <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+            <a href="/" style="font-size: 0.75rem;">&larr; Back to app</a><br>
+            <a href="/api/docs" style="font-size: 0.75rem;">API Docs (Swagger)</a><br>
+            <button class="theme-btn" onclick="toggleTheme()" style="margin-top: 0.5rem;" id="theme-btn">dark mode</button>
+        </div>
+    </nav>
+
+    <main class="content">
+        <a class="back" href="/">&larr; back to app</a>
+
+        <h1 id="overview" style="margin-top: 1.5rem;">Portfolio Tracker — User Guide</h1>
+        <p>A self-hosted app to track your net worth across stocks, crypto, cash, stablecoins, income, and expenses. Replaces the legacy Excel spreadsheet.</p>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="concepts">Key Concepts</h2>
+
+        <h3>Accounts</h3>
+        <p>An account is where you hold assets — a brokerage, a bank, a crypto exchange, or a physical asset (e.g. car, house). Each account has a <strong>type</strong> that classifies it.</p>
+
+        <h3>Assets</h3>
+        <p>An asset is what you own — a stock (VOO), a crypto token (BTC), a fiat currency (USD), or a stablecoin (USDC). Each asset has a <strong>type</strong>, optional <strong>risk category</strong>, and optional <strong>target allocation %</strong>.</p>
+
+        <h3>Snapshots</h3>
+        <p>A snapshot is a point-in-time record: <em>"On this date, this account held this quantity of this asset, worth this much USD."</em> Snapshots are the core data — every chart reads from them.</p>
+        <div class="note">Snapshots are <strong>not</strong> created automatically unless the pricefeed is running. You can create them manually by clicking <strong>"snapshot"</strong> in the navigation bar.</div>
+
+        <h3>Positions</h3>
+        <p>A position is your <strong>current</strong> holding — what you own right now. Unlike snapshots (historical time-series), positions show the latest state. They include average cost for P&L calculation.</p>
+
+        <h3>Allocation Targets</h3>
+        <p>Targets define what percentage of your total net worth should be in each category (stocks 45%, stables 43%, crypto 5%, etc.). The app computes how much to buy/sell to reach your targets.</p>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="first-steps">First Steps</h2>
+        <ol>
+            <li>Review your data on the <a href="/">Dashboard</a> — check the net worth total makes sense</li>
+            <li>Go to <a href="/data?tab=assets">Data → Assets</a> and deactivate any tokens you no longer own</li>
+            <li>Go to <a href="/positions">Positions</a>, unlock editing, and verify your stock holdings (shares + avg cost)</li>
+            <li>Go to <a href="/targets">Targets</a> and set your desired allocation percentages</li>
+            <li>Add your latest <a href="/income">Income</a> and <a href="/expenses">Expenses</a></li>
+        </ol>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="dashboard">Action Center (Home)</h2>
+        <p><code>/</code> — answers "what should I do this week?" not just "what do I own?".</p>
+        <ul>
+            <li><strong>Hero block</strong> — Net Worth as the big number, with the 30-day delta below it and a tiny sparkline of the last ~30 days. Three secondary stats: <em>Drift</em> (how far off targets, in pp), <em>Deployed</em> (% of NW working in stocks/crypto/stables), and <em>Mode</em> (active market regime).</li>
+            <li><strong>Action card stack</strong> — top 5 ranked actions (rebalance, concentration trim, stale-snapshot warning). Each has a priority rail color (alert-deep red / amber / blue), a headline, the reasoning, and the dollar amount + buy/sell direction. Ordered by an urgency score 0–100.</li>
+            <li><strong>Sentiment strip</strong> — compact one-line view of stocks (VOO) + crypto (BTC) market signals plus the active mode. Click "edit targets" to open <code>/targets</code>.</li>
+            <li><strong>Below the fold</strong> — Net Worth by Category combo chart and the three doughnuts (Asset Distribution / Stocks / Crypto). They moved here so the homepage's job is decisions, not display.</li>
+        </ul>
+        <div class="note">All Action Center content is fetched in one request from <code>/api/insights/summary</code>. Action thresholds: drift &lt; 2pp or &lt; $1,000 is suppressed; minimum trade size is max($500, 0.5% of NW); concentration warning fires above 25% in a single asset.</div>
+
+        <h2 id="wealth">Wealth (Holdings)</h2>
+        <p><code>/wealth</code> — every position you hold across stocks, crypto, stables, cash, and physical assets in a single sortable, filterable table.</p>
+        <ul>
+            <li><strong>Filters</strong> — all / stocks / crypto / stables / cash / car. Clicking the type pill on the left filters in place.</li>
+            <li><strong>Search</strong> — type to filter by symbol, name, or account name. Press <code>/</code> from anywhere on the page to focus the search.</li>
+            <li><strong>Sort</strong> — click any column header. Default sort is by value descending.</li>
+            <li><strong>Drift bar</strong> — each row shows its parent category's drift from active target. Bar fills toward the right when over-target, left when under. Color stays neutral until ±10pp (warn) or ±20pp (critical).</li>
+            <li><strong>Sparkline</strong> — last ~30 daily price closes per asset, drawn in green/red/neutral by direction. Shows "—" if there isn't enough price history yet.</li>
+        </ul>
+
+        <h2 id="stocks">Stocks</h2>
+        <p><code>/stocks</code> — Stock portfolio and dividend analysis.</p>
+        <ul>
+            <li><strong>Dividend charts</strong> — monthly, yearly (with growth %), quarterly, year-over-year comparison</li>
+            <li><strong>Portfolio charts</strong> — value over time by broker, holdings doughnut, holding value bar, yearly growth rate (green/red)</li>
+            <li><strong>Positions table</strong> — your current stock holdings. Edit from <a href="/positions">/positions</a>.</li>
+        </ul>
+
+        <h2 id="crypto">Crypto</h2>
+        <p><code>/crypto</code> — Crypto holdings with risk analysis.</p>
+        <ul>
+            <li><strong>Value by token</strong> — stacked area chart showing each token's value over time</li>
+            <li><strong>Risk breakdown</strong> — doughnut showing Safe / Medium / High allocation with percentages</li>
+            <li><strong>Holdings table</strong> — symbol, amount, price, value, risk level, target %. Editable (click lock icon).</li>
+            <li><strong>Actual vs Target</strong> — grouped bar comparing your real allocation % vs target % for tokens with targets (BTC, SOL)</li>
+        </ul>
+
+        <h2 id="cash">Cash &amp; Stables</h2>
+        <p><code>/cash</code> — Fiat and stablecoin balances across all banks.</p>
+        <ul>
+            <li><strong>Cash over time</strong> — stacked area by currency (USD, EUR, GBP, PYG, USDC)</li>
+            <li><strong>Currency breakdown</strong> — doughnut with percentages</li>
+            <li><strong>Balances table</strong> — per-account, per-currency. Editable.</li>
+        </ul>
+
+        <h2 id="positions">Positions</h2>
+        <p><code>/positions</code> — Current stock holdings with cost basis and P&L.</p>
+        <ul>
+            <li><strong>Stats</strong> — Total Invested, Current Value, Gain/Loss (green/red)</li>
+            <li><strong>Table</strong> — Account, Symbol, Type, Shares, Avg Cost, Last Price, Cost Basis, Market Value, Gain/Loss</li>
+        </ul>
+        <div class="tip"><strong>Tip:</strong> Click the lock icon to edit shares and average cost directly. Last Price is updated by the pricefeed.</div>
+
+        <h2 id="income">Income</h2>
+        <p><code>/income</code> — Monthly salary, bonus, and tax tracking.</p>
+        <ul>
+            <li><strong>YTD stats</strong> — net income, gross, taxes, current company</li>
+            <li><strong>Chart</strong> — grouped bars showing salary / bonus / taxes per month</li>
+            <li><strong>Table</strong> — each month with computed Net column. Editable + add new.</li>
+        </ul>
+
+        <h2 id="expenses">Expenses</h2>
+        <p><code>/expenses</code> — Monthly expense tracking.</p>
+        <ul>
+            <li><strong>Chart</strong> — monthly expenses bar chart</li>
+            <li><strong>Table</strong> — date, amount, place. Editable + add new.</li>
+        </ul>
+
+        <h2 id="flow">Money Flow</h2>
+        <p><code>/flow</code> — Income vs expenses vs savings over time.</p>
+        <ul>
+            <li><strong>Savings rate</strong> — big percentage number</li>
+            <li><strong>Chart</strong> — three lines: income (green), expenses (red), savings (blue)</li>
+        </ul>
+
+        <h2 id="accounts">Accounts</h2>
+        <p><code>/accounts</code> — Manage brokerage, bank, and exchange accounts.</p>
+        <ul>
+            <li>Click an account name to see its <strong>detail page</strong> with balance history chart + holdings breakdown</li>
+            <li>Editable — add new accounts, change type/institution, or deactivate</li>
+        </ul>
+
+        <h2 id="assets">Assets</h2>
+        <p><code>/assets</code> — All tracked assets (stocks, crypto, fiat, stablecoins).</p>
+        <ul>
+            <li>Shows symbol, name, type, chain, risk category, and target allocation %</li>
+            <li>Editable — add new assets, change risk/type, set CoinGecko IDs for price fetching</li>
+        </ul>
+
+        <h2 id="targets">Allocation Targets</h2>
+        <p><code>/targets</code> — Set desired portfolio percentages per category, per market mode.</p>
+        <ul>
+            <li><strong>Market Signals</strong> — sentiment cards per sector (50/200-day MA based) with overall mode</li>
+            <li><strong>Chart</strong> — grouped bars comparing your actual % vs the <em>active</em> target %</li>
+            <li><strong>Table</strong> — category × <strong>Bull / Crab / Bear</strong> columns. The active column is highlighted.</li>
+        </ul>
+        <div class="note">Target percentages are decimals: <code>0.45</code> = 45%. The adjustment calculation is available at <code>/api/allocation/adjustments</code>. See <a href="#sentiment">Market Sentiment</a> for how the active mode is chosen.</div>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="sentiment">Market Sentiment</h2>
+        <p>Sentiment is calculated from real price data — not from your portfolio's recent value changes. It uses two standard institutional indicators: the <strong>50-day</strong> and <strong>200-day Simple Moving Average (SMA)</strong>.</p>
+
+        <h3>How it works</h3>
+        <p>For each sector with a tradeable representative asset (stocks → VOO, crypto → BTC), the system pulls daily prices from <code>price_history</code> and computes:</p>
+        <ul>
+            <li><strong>50-day MA</strong> — average closing price over the last 50 days (short-term trend)</li>
+            <li><strong>200-day MA</strong> — average closing price over the last 200 days (long-term trend)</li>
+            <li><strong>Current price</strong> — most recent close</li>
+        </ul>
+
+        <h3>Classification</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem;">
+            <thead><tr><th style="text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--border);">Signal</th><th style="text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--border);">Condition</th><th style="text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--border);">Meaning</th></tr></thead>
+            <tbody>
+                <tr><td style="padding: 6px 8px;"><strong>BULL ↑</strong></td><td style="padding: 6px 8px;">price &gt; 200MA <em>and</em> 50MA &gt; 200MA</td><td style="padding: 6px 8px;">Uptrend confirmed (Golden Cross zone). Favor growth assets.</td></tr>
+                <tr><td style="padding: 6px 8px;"><strong>BEAR ↓</strong></td><td style="padding: 6px 8px;">price &lt; 200MA <em>and</em> 50MA &lt; 200MA</td><td style="padding: 6px 8px;">Downtrend (Death Cross zone). Favor safety (stables, cash).</td></tr>
+                <tr><td style="padding: 6px 8px;"><strong>CRAB →</strong></td><td style="padding: 6px 8px;">mixed signals</td><td style="padding: 6px 8px;">No clear direction. Use balanced default allocation.</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Data requirements</h3>
+        <p>Real signals require the <a href="#pricefeed">pricefeed</a> to have been collecting daily prices:</p>
+        <ul>
+            <li><strong>&lt; 50 days</strong> — shows "Collecting data… N/200 days"</li>
+            <li><strong>50–199 days</strong> — partial signal (50MA only)</li>
+            <li><strong>200+ days</strong> — full Golden/Death Cross logic</li>
+        </ul>
+        <div class="note">Sectors without a tradeable proxy (cash, stables, car) fall back to <strong>Portfolio Momentum</strong> — the 3-month change in value. This is honest about what it measures: your allocation is shifting, not the market.</div>
+
+        <h3>Overall market mode</h3>
+        <p>The active mode is decided by majority vote across sectors with valid signals:</p>
+        <ul>
+            <li>If the majority of signals are <strong>bull</strong> → overall <strong>BULL</strong></li>
+            <li>If the majority are <strong>bear</strong> → overall <strong>BEAR</strong></li>
+            <li>Otherwise → <strong>CRAB</strong> (default, safest)</li>
+        </ul>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="dynamic-targets">Dynamic Targets</h2>
+        <p>Each category has <strong>three</strong> target percentages — one for each market mode. The system uses the set matching the current overall mode.</p>
+
+        <p>Example default targets:</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem;">
+            <thead><tr><th style="text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--border);">Category</th><th style="text-align:right; padding: 6px 8px; border-bottom: 1px solid var(--border);">Bull</th><th style="text-align:right; padding: 6px 8px; border-bottom: 1px solid var(--border);">Crab</th><th style="text-align:right; padding: 6px 8px; border-bottom: 1px solid var(--border);">Bear</th></tr></thead>
+            <tbody>
+                <tr><td style="padding: 6px 8px;">stocks</td><td style="padding: 6px 8px; text-align: right;">60%</td><td style="padding: 6px 8px; text-align: right;">45%</td><td style="padding: 6px 8px; text-align: right;">30%</td></tr>
+                <tr><td style="padding: 6px 8px;">stable_yielding</td><td style="padding: 6px 8px; text-align: right;">25%</td><td style="padding: 6px 8px; text-align: right;">43%</td><td style="padding: 6px 8px; text-align: right;">55%</td></tr>
+                <tr><td style="padding: 6px 8px;">crypto</td><td style="padding: 6px 8px; text-align: right;">10%</td><td style="padding: 6px 8px; text-align: right;">5%</td><td style="padding: 6px 8px; text-align: right;">2%</td></tr>
+                <tr><td style="padding: 6px 8px;">cash</td><td style="padding: 6px 8px; text-align: right;">3%</td><td style="padding: 6px 8px; text-align: right;">5%</td><td style="padding: 6px 8px; text-align: right;">10%</td></tr>
+                <tr><td style="padding: 6px 8px;">car</td><td style="padding: 6px 8px; text-align: right;">2%</td><td style="padding: 6px 8px; text-align: right;">2%</td><td style="padding: 6px 8px; text-align: right;">3%</td></tr>
+            </tbody>
+        </table>
+        <p>To edit your bull / crab / bear targets, open the <a href="/data?tab=targets">Targets tab in /data</a> — the <code>/targets</code> page itself is read-only and exists to help you compare current allocation against the active target.</p>
+
+        <h2 id="data">Data Editor</h2>
+        <p><code>/data</code> — the single place to add, edit, and delete every kind of record.</p>
+        <p>Tabs:</p>
+        <ul>
+            <li><strong>Accounts</strong> — every account (active + deactivated). Add new, deactivate.</li>
+            <li><strong>Assets</strong> — every asset, filterable by type. Add new, deactivate.</li>
+            <li><strong>Snapshots</strong> — raw snapshot rows for any date. Pick a date, review values, delete bad rows.</li>
+            <li><strong>Positions</strong> — current holdings (read-only here; managed via snapshot upserts).</li>
+            <li><strong>Income</strong> — income records. Add new, delete.</li>
+            <li><strong>Expenses</strong> — expense records, with optional category and labels. Add new, delete.</li>
+            <li><strong>Targets</strong> — bull / crab / bear allocation targets per category. Edit any cell.</li>
+            <li><strong>Categories</strong> — expense categories with parent-child hierarchy and optional color. Used in the breakdown chart on <code>/expenses</code>.</li>
+            <li><strong>Labels</strong> — orthogonal tags applied to expenses (e.g. <code>vacation-2026</code>, <code>tax-deductible</code>). Many-to-many with expenses; a label in use is soft-deleted, an unused one is permanently removed.</li>
+        </ul>
+
+        <h3 id="expense-categories-labels">Categorizing expenses</h3>
+        <p>An expense can have one <strong>category</strong> (with hierarchy, e.g. <em>Food / Restaurants</em>) and any number of <strong>labels</strong>. The two are independent:</p>
+        <ul>
+            <li><strong>Category</strong> = "what kind of spending is this" — exclusive, used in the donut chart on <code>/expenses</code>.</li>
+            <li><strong>Labels</strong> = "what context does this belong to" — non-exclusive, useful for cutting across categories ("everything tagged <code>vacation-2026</code>").</li>
+        </ul>
+        <p>In the /data expenses form, pick a category from the dropdown and type a comma-separated list of label IDs (the available IDs are listed below the form). Via the API, send <code>{"category_id": 4, "label_ids": [1, 2]}</code> on create or update.</p>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="edit-vs-view">Edit vs View — the rule</h2>
+        <p>The app makes a hard separation between editing and visualization:</p>
+        <ul>
+            <li><strong><code>/data</code></strong> — the only place where you can add, edit, or delete records.</li>
+            <li><strong>Every other page</strong> — read-only. Charts, tables, signals, and decisions. No edit chrome competing with the data you're trying to interpret.</li>
+        </ul>
+        <p>Each visualization page links back to its corresponding /data tab via a small <em>"edit in /data →"</em> in the page header. This keeps decision-driving pages clean and makes "where do I edit this?" a single answer instead of a memory test.</p>
+
+        <h2 id="data-tabs">Working in /data</h2>
+        <p>Each /data tab follows the same shape:</p>
+        <ul>
+            <li><strong>+ add row</strong> — collapsed by default at the top. Click to expand the add form.</li>
+            <li><strong>Table</strong> — every record, with a delete link per row.</li>
+            <li><strong>Targets tab</strong> — the only tab with inline editing per cell. Type a value, click ✓ to save.</li>
+        </ul>
+
+        <h2 id="deleting-records">Smart delete</h2>
+        <ul>
+            <li><strong>Accounts &amp; Assets</strong> — try to permanently delete; if the row is referenced by snapshots, positions, or transactions, it falls back to soft-delete (active=0). Historical data is preserved.</li>
+            <li><strong>Income, Expenses, Snapshots, Targets</strong> — hard delete (permanently removed).</li>
+        </ul>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="pricefeed">Pricefeed Microservice</h2>
+        <p>A separate binary that fetches live prices and updates the database.</p>
+
+        <h3>Setup</h3>
+        <ol>
+            <li>Get a free CoinGecko API key from <a href="https://www.coingecko.com/en/api/pricing" style="color: #2563eb;">coingecko.com</a></li>
+            <li>Add to <code>.env</code>: <code>COINGECKO_API_KEY=your_key_here</code></li>
+            <li>Run once: <code>cargo run --bin nworth-feed -- --once</code></li>
+            <li>Or run on a schedule: <code>cargo run --bin nworth-feed -- --loop 3600</code> (every hour)</li>
+        </ol>
+
+        <h3>What it does</h3>
+        <ol>
+            <li>Fetches crypto prices from CoinGecko (uses <code>coingecko_id</code> on each asset)</li>
+            <li>Fetches stock prices from Yahoo Finance (uses <code>yahoo_ticker</code>)</li>
+            <li>Fetches FX rates from exchangerate.host (EUR, GBP, PYG)</li>
+            <li>Updates <code>positions.last_price</code> and <code>value_usd</code></li>
+            <li>Creates daily snapshot rows from positions × latest prices</li>
+        </ol>
+
+        <h2 id="snapshots">Creating Snapshots</h2>
+        <p>Three ways to create snapshots:</p>
+        <table class="doc">
+            <tr><th>Method</th><th>How</th><th>When to use</th></tr>
+            <tr><td><strong>Pricefeed</strong></td><td>Automatic after price fetch</td><td>Daily, runs on schedule</td></tr>
+            <tr><td><strong>Manual trigger</strong></td><td>Click "snapshot" in the nav bar</td><td>When you want to record current state now</td></tr>
+            <tr><td><strong>API</strong></td><td><code>POST /api/v1/snapshots/trigger</code></td><td>From scripts or CLI</td></tr>
+        </table>
+
+        <h2 id="cli">CLI Client</h2>
+        <p>A command-line tool that talks to the REST API.</p>
+        <pre>cargo run --bin nworth-cli-- help
+
+# Examples
+nworth-cliaccounts list
+nworth-cliassets list
+nworth-clipositions list
+nworth-clinetworth
+nworth-cliadjustments
+nworth-cliapy
+nworth-cliexpenses create '{"as_of":"2026-04-25","amount_usd":500,"place":"NYC"}'
+nworth-cliincome create '{"as_of":"2026-04-25","salary_usd":8000,"company":"Acme"}'
+nworth-clisnapshots trigger</pre>
+
+        <h2 id="rest-api">REST API</h2>
+        <p>Full JSON CRUD at <code>/api/v1/</code>. Interactive docs at <a href="/api/docs" style="color: #2563eb;">/api/docs</a> (Swagger UI).</p>
+        <table class="doc">
+            <tr><th>Entity</th><th>List</th><th>Create</th><th>Update</th><th>Delete</th></tr>
+            <tr><td>Accounts</td><td><code>GET /api/v1/accounts</code></td><td><code>POST</code></td><td><code>PUT /:id</code></td><td><code>DELETE /:id</code></td></tr>
+            <tr><td>Assets</td><td><code>GET /api/v1/assets</code></td><td><code>POST</code></td><td><code>PUT /:id</code></td><td><code>DELETE /:id</code></td></tr>
+            <tr><td>Snapshots</td><td><code>GET /api/v1/snapshots</code></td><td><code>POST</code></td><td>—</td><td><code>DELETE /:id</code></td></tr>
+            <tr><td>Positions</td><td><code>GET /api/v1/positions</code></td><td><code>POST</code> (upsert)</td><td>—</td><td><code>DELETE /:a/:b</code></td></tr>
+            <tr><td>Income</td><td><code>GET /api/v1/income</code></td><td><code>POST</code></td><td><code>PUT /:id</code></td><td><code>DELETE /:id</code></td></tr>
+            <tr><td>Expenses</td><td><code>GET /api/v1/expenses</code></td><td><code>POST</code></td><td><code>PUT /:id</code></td><td><code>DELETE /:id</code></td></tr>
+            <tr><td>Targets</td><td><code>GET /api/v1/targets</code></td><td><code>POST</code> (upsert)</td><td>—</td><td><code>DELETE /:id</code></td></tr>
+        </table>
+
+        <h2 id="theme">Theme</h2>
+        <p>Click <strong>"dark"</strong> or <strong>"light"</strong> in the top-right of the navigation bar. The preference is saved in your browser's localStorage.</p>
+
+        <!-- ═══════════════════════════════════════ -->
+        <h2 id="account-types">Account Types</h2>
+        <table class="doc">
+            <tr><th>Code</th><th>Label</th><th>Use for</th></tr>
+            <tr><td><code>broker</code></td><td>Broker</td><td>Stock brokerages</td></tr>
+            <tr><td><code>bank</code></td><td>Bank</td><td>Traditional banks (any retail or business bank)</td></tr>
+            <tr><td><code>exchange</code></td><td>Crypto Exchange</td><td>Centralized crypto exchanges</td></tr>
+            <tr><td><code>cash</code></td><td>Physical Cash</td><td>Cash on hand, misc — Cash, Airbnb, REI</td></tr>
+            <tr><td><code>crypto</code></td><td>Crypto (aggregate)</td><td>Single bucket for all on-chain crypto holdings</td></tr>
+            <tr><td><code>asset</code></td><td>Physical Asset</td><td>Cars, property, physical valuables</td></tr>
+        </table>
+
+        <h2 id="asset-types">Asset Types</h2>
+        <table class="doc">
+            <tr><th>Code</th><th>Label</th><th>Examples</th></tr>
+            <tr><td><code>crypto</code></td><td>Crypto</td><td>BTC, ETH, SOL, JUP, KMNO</td></tr>
+            <tr><td><code>stock</code></td><td>Stock / ETF</td><td>Any equity ticker (e.g. VOO, AAPL)</td></tr>
+            <tr><td><code>stable</code></td><td>Stablecoin</td><td>USDC</td></tr>
+            <tr><td><code>fiat</code></td><td>Fiat Currency</td><td>USD, EUR, GBP, PYG</td></tr>
+            <tr><td><code>nft</code></td><td>NFT</td><td>NFTs (aggregated)</td></tr>
+        </table>
+
+        <h2 id="risk-categories">Risk Categories</h2>
+        <table class="doc">
+            <tr><th>Code</th><th>Label</th><th>Tokens</th></tr>
+            <tr><td><code>cat1_safe</code></td><td>Safe</td><td>BTC, ETH, SOL — blue-chip, established</td></tr>
+            <tr><td><code>cat2_medium</code></td><td>Medium Risk</td><td>KMNO, PYTH, PRCL, STX, W — mid-cap, some track record</td></tr>
+            <tr><td><code>cat3_high</code></td><td>High Risk</td><td>JUP, BONK — speculative, volatile</td></tr>
+        </table>
+
+        <h2 id="chains">Blockchain Chains</h2>
+        <table class="doc">
+            <tr><th>Code</th><th>Label</th><th>Used for</th></tr>
+            <tr><td><code>bitcoin</code></td><td>Bitcoin</td><td>BTC</td></tr>
+            <tr><td><code>ethereum</code></td><td>Ethereum</td><td>ETH, ERC-20 tokens</td></tr>
+            <tr><td><code>solana</code></td><td>Solana</td><td>SOL, SPL tokens, on-chain tokenized stocks</td></tr>
+            <tr><td><code>cosmos</code></td><td>Cosmos</td><td>ATOM and Cosmos-zone tokens</td></tr>
+        </table>
+
+    </main>
+</div>
+<script>
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    document.getElementById('theme-btn').textContent = isDark ? 'light mode' : 'dark mode';
+}
+document.getElementById('theme-btn').textContent =
+    document.documentElement.classList.contains('dark') ? 'light mode' : 'dark mode';
+</script>
+</body>
+</html>

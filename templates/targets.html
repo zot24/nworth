@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Allocation Targets — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Allocation Targets</h1>
+    <a href="/data?tab=targets" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+<p class="secondary" style="font-size: 0.8125rem; margin-bottom: 2rem;">See where you stand against your desired allocation under the active market mode. Targets shift with bull / crab / bear conditions.</p>
+
+<!-- Market Sentiment per representative asset -->
+<div style="margin-bottom: 2.5rem;">
+    <div class="section-eyebrow">Market Signals</div>
+    <div id="sentiment-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;"></div>
+    <div id="overall-mode" style="margin-top: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; color: var(--text-secondary);"></div>
+</div>
+
+<hr>
+
+<!-- Side-by-side: actual vs active target chart -->
+<div class="chart-box">
+    <h3>Current vs Active Target</h3>
+    <canvas id="target-chart" height="100"></canvas>
+</div>
+
+<hr>
+
+<!-- Comparison table: per-category Current %, Active Target %, Drift, Adjustment $ -->
+<div class="section-eyebrow">Where you are vs where you want to be</div>
+<table style="margin-bottom: 2.5rem;">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th class="r">Current %</th>
+            <th class="r">Active Target %</th>
+            <th class="r">Drift</th>
+            <th class="r">To rebalance</th>
+        </tr>
+    </thead>
+    <tbody id="comparison-tbody">
+        <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading…</td></tr>
+    </tbody>
+</table>
+
+<!-- 3-mode targets table (read-only) -->
+<div class="section-eyebrow">Targets per market mode</div>
+<table>
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th class="r" id="col-bull">Bull %</th>
+            <th class="r" id="col-crab">Crab %</th>
+            <th class="r" id="col-bear">Bear %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for g in groups %}
+        <tr>
+            <td class="name">{{ g.category }}</td>
+            <td class="r">{{ "{:.0}"|format(g.bull_pct * 100.0) }}%</td>
+            <td class="r">{{ "{:.0}"|format(g.crab_pct * 100.0) }}%</td>
+            <td class="r">{{ "{:.0}"|format(g.bear_pct * 100.0) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+(async () => {
+    // Sentiment cards
+    const sentiment = await (await fetch('/api/market/sentiment')).json();
+    const container = document.getElementById('sentiment-cards');
+    const isDark = document.documentElement.classList.contains('dark');
+
+    const colors = {
+        bull: isDark ? { bg: 'rgba(52,211,153,0.08)', border: '#34d399', text: '#34d399' }
+                     : { bg: 'rgba(26,127,75,0.08)',  border: '#1a7f4b', text: '#1a7f4b' },
+        bear: isDark ? { bg: 'rgba(251,113,133,0.08)', border: '#fb7185', text: '#fb7185' }
+                     : { bg: 'rgba(192,57,43,0.08)',   border: '#c0392b', text: '#c0392b' },
+        crab: isDark ? { bg: 'rgba(251,191,36,0.08)', border: '#fbbf24', text: '#fbbf24' }
+                     : { bg: 'rgba(184,134,11,0.08)', border: '#b8860b', text: '#b8860b' },
+        pending: { bg: 'rgba(128,128,128,0.05)', border: 'var(--text-muted)', text: 'var(--text-muted)' },
+    };
+    const icons = { bull: '↑', bear: '↓', crab: '→', pending: '·' };
+
+    let signals = [];
+    sentiment.forEach(s => {
+        const ms = s.market_signal;
+        const signal = ms.signal || 'pending';
+        const c = colors[signal] || colors.pending;
+        const card = document.createElement('div');
+        card.style.cssText = `padding: 1rem; border-left: 3px solid ${c.border}; background: ${c.bg}; border-radius: 2px;`;
+        let line = '';
+        if (ms.status === 'active' || ms.status === 'partial') {
+            line = `<div style="font-family: 'IBM Plex Mono', monospace; font-size: 1.125rem; font-weight: 500; color: ${c.text};">${icons[signal]} ${signal.toUpperCase()}</div>`;
+            line += `<div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 2px;">${ms.label}</div>`;
+            if (ms.ma_50 && ms.ma_200) {
+                line += `<div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.625rem; color: var(--text-muted); margin-top: 4px;">50MA: $${ms.ma_50.toFixed(0)} · 200MA: $${ms.ma_200.toFixed(0)}</div>`;
+            }
+            signals.push(signal);
+        } else if (ms.status === 'insufficient_data') {
+            line = `<div style="font-size: 0.75rem; color: var(--text-muted);">${ms.label}</div>`;
+            line += `<div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.625rem; color: var(--text-muted); margin-top: 4px;">${ms.days_of_data}/${ms.days_needed} days</div>`;
+        } else {
+            const pm = s.portfolio_momentum;
+            const pmSig = pm.trend;
+            const pc = colors[pmSig] || colors.crab;
+            card.style.borderColor = pc.border;
+            card.style.background = pc.bg;
+            line = `<div style="font-family: 'IBM Plex Mono', monospace; font-size: 1.125rem; font-weight: 500; color: ${pc.text};">${icons[pmSig]} ${pmSig.toUpperCase()}</div>`;
+            line += `<div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 2px;">Portfolio: ${pm.change_3m_pct >= 0 ? '+' : ''}${pm.change_3m_pct.toFixed(0)}% (3mo)</div>`;
+        }
+        card.innerHTML = `
+            <div style="font-family: 'Source Sans 3', sans-serif; font-weight: 600; font-size: 0.6875rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">
+                ${s.category}${s.representative_asset ? ' (' + s.representative_asset + ')' : ''}
+            </div>
+            ${line}
+        `;
+        container.appendChild(card);
+    });
+
+    // Active mode (computed by /api/insights/summary for consistency)
+    const summary = await (await fetch('/api/insights/summary')).json();
+    const overallMode = summary.stats.active_mode;
+    const modeColors = { bull: colors.bull.text, bear: colors.bear.text, crab: colors.crab.text };
+    document.getElementById('overall-mode').innerHTML =
+        `Active mode: <span style="color: ${modeColors[overallMode]}; font-weight: 600;">${overallMode.toUpperCase()}</span>`;
+
+    // Highlight active column header
+    const colEl = document.getElementById('col-' + overallMode);
+    if (colEl) colEl.style.cssText += 'color: var(--text); font-weight: 700; border-bottom-width: 3px;';
+
+    // Comparison table
+    const tbody = document.getElementById('comparison-tbody');
+    if (!summary.drift.categories.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No snapshots yet. Add data in /data to see your standing.</td></tr>';
+    } else {
+        tbody.innerHTML = summary.drift.categories.map(c => {
+            const driftPp = c.drift_pp;
+            const adj = c.adjustment_usd;
+            const driftCls = Math.abs(driftPp) < 2 ? '' : driftPp > 0 ? 'neg' : 'pos';
+            const sign = driftPp >= 0 ? '+' : '−';
+            const adjVerb = Math.abs(adj) < 1 ? '·' : adj > 0 ? `buy $${Math.round(adj).toLocaleString()}` : `sell $${Math.round(-adj).toLocaleString()}`;
+            return `
+                <tr ${c.tradable ? '' : 'style="opacity: 0.55;"'}>
+                    <td class="name">${c.category}</td>
+                    <td class="r">${(c.current_pct * 100).toFixed(1)}%</td>
+                    <td class="r">${(c.target_pct * 100).toFixed(1)}%</td>
+                    <td class="r ${driftCls}" style="font-weight: 500;">${Math.abs(driftPp) < 0.05 ? '·' : sign + Math.abs(driftPp).toFixed(1) + 'pp'}</td>
+                    <td class="r" style="color: var(--text-secondary);">${c.tradable ? adjVerb : '—'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Actual vs active target chart
+    const adj = await (await fetch('/api/allocation/adjustments')).json();
+    if (adj.length) {
+        new Chart(document.getElementById('target-chart'), {
+            type: 'bar',
+            data: {
+                labels: adj.map(d => d.category),
+                datasets: [
+                    { label: 'Actual %', data: adj.map(d => d.current_pct * 100), backgroundColor: PALETTE[0] + '60', borderColor: PALETTE[0], borderWidth: 1.5, borderRadius: 2 },
+                    { label: 'Target %', data: adj.map(d => d.target_pct * 100), backgroundColor: PALETTE[1] + '40', borderColor: PALETTE[1], borderWidth: 1.5, borderRadius: 2 },
+                ],
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { color: getThemeColors().tick }, grid: { display: false }, border: { display: false } },
+                    y: { ticks: { color: getThemeColors().tick, callback: v => v + '%' }, grid: { color: getThemeColors().grid }, border: { display: false } },
+                },
+            },
+        });
+    }
+})();
+</script>
+{% endblock %}

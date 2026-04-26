@@ -1,0 +1,13 @@
+
+__pycache__/
+.DS_Store
+.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.xlsx
+/data
+/target
+# Personal xlsx imports — never commit financial data
+pytest-cache-files-*/

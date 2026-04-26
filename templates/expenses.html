@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Expenses — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Expenses</h1>
+    <a href="/data?tab=expenses" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem;">YTD Expenses</div>
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400;">${{ "{:.0}"|format(current_year_total) }}</div>
+</div>
+
+<dl class="stat-row">
+    <div>
+        <dt>Latest Month</dt>
+        <dd>${{ "{:.0}"|format(current_month_amount) }}</dd>
+    </div>
+    <div>
+        <dt>As Of</dt>
+        <dd style="font-family: 'Source Sans 3', sans-serif;">{{ latest_as_of }}</dd>
+    </div>
+</dl>
+
+<hr>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Monthly Expenses</h3>
+        <canvas id="expenses-chart" height="180"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>By Category — last 30d
+            <span id="window-toggle" style="margin-left: 1rem; font-size: 0.625rem; font-weight: 400;">
+                <a class="window-link active" data-window="month" style="cursor:pointer; text-decoration: underline; color: var(--text);">30d</a>
+                &nbsp;<a class="window-link" data-window="quarter" style="cursor:pointer; color: var(--text-muted);">90d</a>
+                &nbsp;<a class="window-link" data-window="ytd" style="cursor:pointer; color: var(--text-muted);">YTD</a>
+            </span>
+        </h3>
+        <canvas id="cat-chart" height="180"></canvas>
+    </div>
+</div>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th class="r">Amount</th>
+            <th>Place</th>
+            <th>Category</th>
+            <th>Labels</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.as_of }}</td>
+            <td class="r">${{ "{:.2}"|format(r.amount_usd) }}</td>
+            <td class="label">{{ r.place }}</td>
+            <td class="label">
+                {% if r.category_name.is_empty() == false %}
+                {% if r.category_color.is_empty() == false %}<span style="display:inline-block; width:8px; height:8px; background: {{ r.category_color }}; border-radius:2px; margin-right:6px; vertical-align: 1px;"></span>{% endif %}
+                {{ r.category_name }}
+                {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="label" style="font-size: 0.6875rem; color: var(--text-muted);">{{ r.labels_display }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+let CAT_CHART = null;
+
+async function loadCategoryChart(window) {
+    const data = await (await fetch('/api/expenses/by-category?window=' + window)).json();
+    const labels = data.map(d => d.category_name);
+    const values = data.map(d => d.amount_usd);
+    const colors = data.map((d, i) => d.color || PALETTE[i % PALETTE.length]);
+    if (CAT_CHART) CAT_CHART.destroy();
+    if (!values.length) {
+        const ctx = document.getElementById('cat-chart').getContext('2d');
+        ctx.clearRect(0, 0, 9999, 9999);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+        ctx.font = '12px sans-serif';
+        ctx.fillText('No categorized expenses in this window.', 12, 32);
+        return;
+    }
+    const total = values.reduce((a, b) => a + b, 0);
+    CAT_CHART = new Chart(document.getElementById('cat-chart'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
+        options: {
+            cutout: '65%', responsive: true,
+            plugins: {
+                legend: { position: 'right', labels: { padding: 8,
+                    generateLabels: chart => chart.data.labels.map((label, i) => {
+                        const val = chart.data.datasets[0].data[i];
+                        const pct = total > 0 ? (val / total * 100).toFixed(1) : '0.0';
+                        return { text: `${label} ${pct}%`, fillStyle: chart.data.datasets[0].backgroundColor[i], hidden: !chart.getDataVisibility(i), index: i };
+                    }),
+                } },
+                tooltip: { callbacks: { label: ctx => '  $' + ctx.parsed.toLocaleString(undefined, {maximumFractionDigits: 0}) } },
+            },
+        },
+    });
+}
+
+(async () => {
+    // Monthly stack (existing)
+    const monthly = await (await fetch('/api/expenses/monthly')).json();
+    new Chart(document.getElementById('expenses-chart'), {
+        type: 'bar',
+        data: {
+            labels: monthly.map(d => d.as_of),
+            datasets: [{ data: monthly.map(d => d.amount_usd), backgroundColor: PALETTE[3], borderWidth: 0 }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: darkScale(false) },
+    });
+
+    // Initial category breakdown
+    loadCategoryChart('month');
+
+    // Window toggle
+    document.querySelectorAll('.window-link').forEach(a => {
+        a.addEventListener('click', () => {
+            document.querySelectorAll('.window-link').forEach(x => { x.style.color = 'var(--text-muted)'; x.style.textDecoration = 'none'; x.classList.remove('active'); });
+            a.style.color = 'var(--text)'; a.style.textDecoration = 'underline'; a.classList.add('active');
+            const win = a.dataset.window;
+            document.querySelector('.chart-box h3').textContent = 'Monthly Expenses'; // no-op (different chart-box)
+            loadCategoryChart(win);
+        });
+    });
+})();
+</script>
+{% endblock %}

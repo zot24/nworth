@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}Action Center — Portfolio{% endblock %}
+
+{% block content %}
+
+{% if !has_data %}
+<div style="text-align: center; padding: 4rem 1rem; color: var(--text-secondary);">
+    <h1 style="font-family: 'Libre Baskerville', serif; font-weight: 400; font-size: 1.5rem; color: var(--text); margin-bottom: 0.75rem;">No data yet</h1>
+    <p style="font-size: 0.9375rem; max-width: 460px; margin: 0 auto 1.5rem;">Add an account and asset, then snapshot your holdings to see your Action Center light up.</p>
+    <p style="font-size: 0.8125rem;">
+        <a href="/accounts" style="color: var(--text); text-decoration: underline;">Add account</a>
+        &nbsp;·&nbsp;
+        <a href="/assets" style="color: var(--text); text-decoration: underline;">Add asset</a>
+        &nbsp;·&nbsp;
+        <a href="/data" style="color: var(--text); text-decoration: underline;">Open data editor</a>
+    </p>
+</div>
+{% else %}
+
+<div style="display: flex; justify-content: flex-end; margin-bottom: -1.25rem;">
+    <a href="/data" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<!-- ───── Hero: Net Worth + decision stats ───── -->
+<div class="hero-block">
+    <div>
+        <div class="hero-eyebrow" id="hero-eyebrow">Net Worth</div>
+        <div class="hero-value" id="hero-value">—</div>
+        <div class="hero-delta" id="hero-delta"></div>
+    </div>
+    <div style="flex: 1; max-width: 200px; align-self: flex-end;">
+        <canvas id="hero-spark" class="sparkline" height="36"></canvas>
+    </div>
+    <div class="stat-block-grid">
+        <div class="stat-block">
+            <div class="stat-block-label">Drift</div>
+            <div class="stat-block-value" id="stat-drift">—</div>
+            <div class="stat-block-sub" id="stat-drift-sub">vs targets</div>
+        </div>
+        <div class="stat-block">
+            <div class="stat-block-label">Deployed</div>
+            <div class="stat-block-value" id="stat-deploy">—</div>
+            <div class="stat-block-sub">stocks + crypto + stables</div>
+        </div>
+        <div class="stat-block">
+            <div class="stat-block-label">Mode</div>
+            <div class="stat-block-value" id="stat-mode">—</div>
+            <div class="stat-block-sub" id="stat-mode-sub"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ───── Action card stack ───── -->
+<div class="section-eyebrow">What to do this week</div>
+<div class="action-stack" id="action-stack">
+    <div class="action-empty">Loading…</div>
+</div>
+
+<!-- ───── Compact sentiment strip ───── -->
+<div class="sentiment-strip" id="sentiment-strip" style="margin-top: 2.5rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);"></div>
+
+<!-- ───── Below the fold: existing charts preserved ───── -->
+<hr style="margin-top: 2.5rem;">
+
+<div class="chart-box">
+    <h3>Net Worth by Category</h3>
+    <canvas id="networth-combo" height="180"></canvas>
+</div>
+
+<hr>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Asset Distribution</h3>
+        <canvas id="donut-category" height="200"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Stock Holdings</h3>
+        <canvas id="donut-stocks" height="200"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Crypto Holdings</h3>
+        <canvas id="donut-crypto" height="200"></canvas>
+    </div>
+</div>
+
+<script>
+const CAT_COLORS = {
+    'Stocks': '#2563eb',
+    'Stable Yielding': '#d97706',
+    'Crypto': '#7c3aed',
+    'Cash': '#059669',
+    'Car': '#dc2626',
+};
+
+function fmtMoney(n) {
+    return '$' + Math.round(Math.abs(n)).toLocaleString();
+}
+
+function fmtSigned(n) {
+    const sign = n >= 0 ? '+' : '−';
+    return sign + fmtMoney(n);
+}
+
+function classForDelta(n) { return n > 0 ? 'pos' : (n < 0 ? 'neg' : ''); }
+function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
+
+(async () => {
+    // ─── Action Center summary (single bundled call) ───
+    const summary = await (await fetch('/api/insights/summary')).json();
+
+    // Hero
+    document.getElementById('hero-value').textContent = fmtMoney(summary.stats.net_worth);
+    document.getElementById('hero-eyebrow').textContent = 'Net Worth — as of ' + (summary.stats.as_of || 'no data');
+
+    const delta30 = summary.deltas.points.find(p => p.label === '30d');
+    const heroDelta = document.getElementById('hero-delta');
+    if (delta30) {
+        const cls = classForDelta(delta30.delta_usd);
+        heroDelta.innerHTML = `<span class="${cls}"><span class="arrow">${arrow(delta30.delta_usd)}</span>${fmtSigned(delta30.delta_usd)} ${delta30.delta_pct >= 0 ? '+' : ''}${delta30.delta_pct.toFixed(2)}%</span><span class="meta">last 30 days</span>`;
+    }
+
+    // Decision stat blocks
+    const drift = summary.stats.abs_drift_pp;
+    const driftEl = document.getElementById('stat-drift');
+    driftEl.textContent = drift.toFixed(1) + 'pp';
+    driftEl.className = 'stat-block-value ' + (drift < 5 ? 'pos' : drift < 15 ? '' : 'neg');
+    document.getElementById('stat-drift-sub').textContent = drift < 5 ? 'within tolerance' : drift < 15 ? 'review' : 'rebalance';
+
+    document.getElementById('stat-deploy').textContent = (summary.stats.deployment_ratio * 100).toFixed(0) + '%';
+
+    const mode = summary.stats.active_mode.toUpperCase();
+    const modeEl = document.getElementById('stat-mode');
+    modeEl.innerHTML = `<span class="severity-pill ${summary.stats.active_mode}">${arrowMode(summary.stats.active_mode)} ${mode}</span>`;
+    document.getElementById('stat-mode-sub').textContent = summary.stats.mode_coherence.aligned ? 'signals aligned' : 'signals diverging';
+
+    // Hero sparkline
+    if (summary.deltas.sparkline.length > 1) {
+        const labels = summary.deltas.sparkline.map(p => p[0]);
+        const values = summary.deltas.sparkline.map(p => p[1]);
+        const startVal = values[0], endVal = values[values.length-1];
+        const sparkColor = endVal > startVal * 1.005 ? getComputedStyle(document.documentElement).getPropertyValue('--pos').trim()
+                         : endVal < startVal * 0.995 ? getComputedStyle(document.documentElement).getPropertyValue('--neg').trim()
+                         : getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+        new Chart(document.getElementById('hero-spark'), {
+            type: 'line',
+            data: { labels, datasets: [{ data: values, borderColor: sparkColor, borderWidth: 1.25, pointRadius: 0, fill: false, tension: 0.3 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false } },
+                elements: { line: { borderJoinStyle: 'round' } },
+            },
+        });
+    }
+
+    // Action card stack
+    renderActions(summary.actions.actions);
+
+    // Sentiment strip
+    renderSentiment(summary.sentiment_compact, summary.stats.active_mode);
+
+    // ─── Below-the-fold charts (existing) ───
+    const catData = await (await fetch('/api/networth/by-category')).json();
+    const dates = [...new Set(catData.map(d => d.as_of))].sort();
+    const categories = [...new Set(catData.map(d => d.category))];
+    const lk = {};
+    catData.forEach(d => { lk[d.as_of + '|' + d.category] = d.value_usd; });
+
+    const barDS = categories.map(cat => ({
+        type: 'bar', label: cat,
+        data: dates.map(d => lk[d + '|' + cat] || 0),
+        backgroundColor: (CAT_COLORS[cat] || PALETTE[0]) + '60',
+        borderColor: 'transparent', borderRadius: 1, stack: 'main',
+    }));
+    const totals = dates.map(d => categories.reduce((s, c) => s + (lk[d + '|' + c] || 0), 0));
+    barDS.push({ type: 'line', label: 'Total', data: totals, borderColor: '#d97706', borderWidth: 2, pointRadius: 0, pointHitRadius: 10, tension: 0.35, fill: false, order: -1 });
+
+    new Chart(document.getElementById('networth-combo'), {
+        type: 'bar',
+        data: { labels: dates, datasets: barDS },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { padding: 14 } } },
+            scales: {
+                x: { stacked: true, ticks: { color: getThemeColors().tick, font: { size: 9 }, maxRotation: 0, maxTicksLimit: 20 }, grid: { display: false }, border: { display: false } },
+                y: { stacked: true, ticks: { color: getThemeColors().tick, font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: getThemeColors().grid }, border: { display: false } },
+            },
+        },
+    });
+
+    const alloc = await (await fetch('/api/allocation')).json();
+    const catTotals = {};
+    alloc.forEach(a => {
+        const cat = a.type_code === 'stock' ? 'Stocks'
+            : a.type_code === 'stable' ? 'Stable Yielding'
+            : (a.type_code === 'crypto' || a.type_code === 'nft') ? 'Crypto'
+            : a.type_code === 'fiat' && a.symbol === 'CAR' ? 'Car'
+            : 'Cash';
+        catTotals[cat] = (catTotals[cat] || 0) + a.value_usd;
+    });
+    const cL = Object.keys(catTotals), cV = Object.values(catTotals);
+    const catTotal = cV.reduce((a, b) => a + b, 0);
+    new Chart(document.getElementById('donut-category'), {
+        type: 'doughnut',
+        data: { labels: cL, datasets: [{ data: cV, backgroundColor: cL.map(c => CAT_COLORS[c] || '#999'), borderWidth: 0 }] },
+        options: {
+            cutout: '65%', responsive: true,
+            plugins: {
+                legend: { position: 'right', labels: { padding: 10, generateLabels: chart => chart.data.labels.map((label, i) => {
+                    const val = chart.data.datasets[0].data[i];
+                    const pct = catTotal > 0 ? (val / catTotal * 100).toFixed(1) : '0.0';
+                    return { text: label + '  ' + pct + '%', fillStyle: chart.data.datasets[0].backgroundColor[i], hidden: !chart.getDataVisibility(i), index: i };
+                }) } },
+                tooltip: { callbacks: { label: ctx => {
+                    const pct = catTotal > 0 ? (ctx.parsed / catTotal * 100).toFixed(1) : '0.0';
+                    return '  $' + ctx.parsed.toLocaleString(undefined, {maximumFractionDigits: 0}) + '  (' + pct + '%)';
+                } } },
+            },
+        },
+    });
+
+    const stocks = await (await fetch('/api/allocation/stocks')).json();
+    new Chart(document.getElementById('donut-stocks'), doughnutConfig(stocks.map(s => s.symbol), stocks.map(s => s.value_usd)));
+
+    const crypto = await (await fetch('/api/allocation/crypto')).json();
+    new Chart(document.getElementById('donut-crypto'), doughnutConfig(crypto.map(c => c.symbol), crypto.map(c => c.value_usd)));
+})();
+
+function arrowMode(m) { return m === 'bull' ? '▲' : m === 'bear' ? '▼' : '~'; }
+
+function renderActions(actions) {
+    const el = document.getElementById('action-stack');
+    if (!actions.length) {
+        el.innerHTML = '<div class="action-empty">All caught up. No actions recommended right now.</div>';
+        return;
+    }
+    el.innerHTML = actions.slice(0, 5).map(a => {
+        const dotCls = a.priority;
+        const railCls = a.priority;
+        const tier = a.priority === 'critical' ? 'CRITICAL' : a.priority === 'suggested' ? 'SUGGESTED' : 'INFO';
+        const amount = a.amount_usd != null ? `<div class="action-amount">${fmtMoney(a.amount_usd)}</div><div class="action-amount-label">${a.direction || 'review'}</div>` : '';
+        return `
+            <div class="action-row">
+                <div class="priority-rail ${railCls}"></div>
+                <div class="action-body">
+                    <div class="action-eyebrow"><span class="dot ${dotCls}"></span>${tier} · ${a.kind}</div>
+                    <div class="action-headline">${escapeHtml(a.headline)}</div>
+                    <div class="action-detail">${escapeHtml(a.body)}</div>
+                </div>
+                <div class="action-numeric">${amount}</div>
+            </div>`;
+    }).join('');
+}
+
+function renderSentiment(badges, activeMode) {
+    const el = document.getElementById('sentiment-strip');
+    const segs = badges.map(b => {
+        const sigCls = b.signal;
+        const arrowGlyph = b.signal === 'bull' ? '↑' : b.signal === 'bear' ? '↓' : b.signal === 'crab' ? '→' : '·';
+        const status = b.status === 'insufficient_data' ? ' (collecting)' : '';
+        return `<span class="seg"><span class="seg-label">${b.category}</span><span class="severity-pill ${sigCls}">${arrowGlyph} ${b.signal.toUpperCase()}</span>${status}</span>`;
+    }).join('<span class="divider">·</span>');
+    el.innerHTML = `${segs}<span class="divider">·</span><span class="seg"><span class="seg-label">Active mode</span><span class="severity-pill ${activeMode}">${arrowMode(activeMode)} ${activeMode.toUpperCase()}</span></span><span style="flex:1"></span><a href="/targets">edit targets →</a>`;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+</script>
+
+{% endif %}
+{% endblock %}

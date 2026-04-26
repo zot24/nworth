@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Crypto — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Crypto</h1>
+    <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+<div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.8125rem; color: var(--text-muted);">As of {{ latest_as_of }}</div>
+
+<div style="display: flex; align-items: baseline; gap: 3rem; margin-top: 1.5rem;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400; color: var(--text);">
+        ${{ "{:.0}"|format(total_crypto_value) }}
+    </div>
+    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.8125rem; color: var(--text-muted);">
+        Strategy: 70% BTC / 30% SOL
+    </div>
+</div>
+
+<hr>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Crypto Value by Token</h3>
+        <canvas id="crypto-history-chart" height="140"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Risk Breakdown</h3>
+        <canvas id="risk-chart" height="200"></canvas>
+    </div>
+</div>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Symbol</th>
+            <th class="r">Amount</th>
+            <th class="r">Price</th>
+            <th class="r">Value</th>
+            <th>Risk</th>
+            <th class="r">Target %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for h in holdings %}
+        <tr>
+            <td class="name">{{ h.symbol }}</td>
+            <td class="r">{{ "{:.2}"|format(h.quantity) }}</td>
+            <td class="r">${{ "{:.2}"|format(h.price_usd) }}</td>
+            <td class="r">${{ "{:.2}"|format(h.value_usd) }}</td>
+            <td>
+                {% if h.risk_code == "cat1_safe" %}
+                <span class="risk-safe">Safe</span>
+                {% else if h.risk_code == "cat2_medium" %}
+                <span class="risk-medium">Medium</span>
+                {% else if h.risk_code == "cat3_high" %}
+                <span class="risk-high">High</span>
+                {% else %}
+                <span style="color: var(--text-secondary);">{{ h.risk_code }}</span>
+                {% endif %}
+            </td>
+            <td class="r">
+                {% if h.target_pct > 0.0 %}{{ "{:.0}"|format(h.target_pct * 100.0) }}%{% else %}—{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<hr>
+
+<div class="chart-box">
+    <h3>Actual vs Target</h3>
+    <canvas id="target-chart" height="80"></canvas>
+</div>
+
+<script>
+(async () => {
+    // Crypto Value by Token — stacked area
+    const hist = await (await fetch('/api/crypto/history')).json();
+    const symbols = [...new Set(hist.map(r => r.symbol))];
+    const dates = [...new Set(hist.map(r => r.as_of))].sort();
+    const lookup = {};
+    hist.forEach(r => { lookup[r.as_of + '|' + r.symbol] = r.value_usd; });
+
+    new Chart(document.getElementById('crypto-history-chart'), {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: symbols.map((sym, i) =>
+                areaDataset(sym, dates.map(d => lookup[d + '|' + sym] || 0), i)
+            ),
+        },
+        options: { responsive: true, scales: darkScale() },
+    });
+
+    // Risk Breakdown — doughnut with percentages
+    const riskData = [{{ safe_value }}, {{ medium_value }}, {{ high_value }}];
+    const riskTotal = riskData.reduce((a, b) => a + b, 0);
+    const riskLabels = ['Safe', 'Medium', 'High'];
+    const riskColors = ['#1a7f4b', '#b8860b', '#c0392b'];
+    new Chart(document.getElementById('risk-chart'), {
+        type: 'doughnut',
+        data: { labels: riskLabels, datasets: [{ data: riskData, backgroundColor: riskColors, borderWidth: 0 }] },
+        options: {
+            cutout: '65%', responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 10,
+                        generateLabels: chart => chart.data.labels.map((label, i) => {
+                            const val = chart.data.datasets[0].data[i];
+                            const pct = riskTotal > 0 ? (val / riskTotal * 100).toFixed(1) : '0.0';
+                            return { text: label + '  ' + pct + '%', fillStyle: riskColors[i], hidden: !chart.getDataVisibility(i), index: i };
+                        }),
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const pct = riskTotal > 0 ? (ctx.parsed / riskTotal * 100).toFixed(1) : '0.0';
+                            return '  $' + ctx.parsed.toLocaleString(undefined, {maximumFractionDigits: 0}) + '  (' + pct + '%)';
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    // Actual vs Target allocation
+    const totalCrypto = [{{ safe_value }}, {{ medium_value }}, {{ high_value }}].reduce((a, b) => a + b, 0);
+    const targetTokens = [];
+    {% for h in holdings %}
+    {% if h.target_pct > 0.0 %}
+    targetTokens.push({ symbol: '{{ h.symbol }}', actual: {{ h.value_usd }} / totalCrypto * 100, target: {{ h.target_pct }} * 100 });
+    {% endif %}
+    {% endfor %}
+
+    if (targetTokens.length > 0) {
+        new Chart(document.getElementById('target-chart'), {
+            type: 'bar',
+            data: {
+                labels: targetTokens.map(t => t.symbol),
+                datasets: [
+                    { label: 'Actual %', data: targetTokens.map(t => t.actual), backgroundColor: '#2563eb40', borderColor: '#2563eb', borderWidth: 1.5, borderRadius: 1 },
+                    { label: 'Target %', data: targetTokens.map(t => t.target), backgroundColor: '#7c3aed40', borderColor: '#7c3aed', borderWidth: 1.5, borderRadius: 1 },
+                ],
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { color: getThemeColors().tick, font: { family: "'IBM Plex Mono', monospace" } }, grid: { display: false }, border: { display: false } },
+                    y: { ticks: { color: getThemeColors().tick, callback: v => v + '%' }, grid: { color: getThemeColors().grid }, border: { display: false } },
+                },
+            },
+        });
+    }
+})();
+</script>
+{% endblock %}

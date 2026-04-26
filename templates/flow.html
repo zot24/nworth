@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Money Flow — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Money Flow</h1>
+    <a href="/data?tab=income" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem;">Savings Rate</div>
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400;">{{ "{:.1}"|format(savings_rate_pct) }}%</div>
+</div>
+
+<dl class="stat-row">
+    <div>
+        <dt>YTD Income</dt>
+        <dd class="green">${{ "{:.0}"|format(current_year_income) }}</dd>
+    </div>
+    <div>
+        <dt>YTD Expenses</dt>
+        <dd class="red">${{ "{:.0}"|format(current_year_expenses) }}</dd>
+    </div>
+    <div>
+        <dt>YTD Savings</dt>
+        <dd class="{% if current_year_savings >= 0.0 %}green{% else %}red{% endif %}">${{ "{:.0}"|format(current_year_savings) }}</dd>
+    </div>
+</dl>
+
+<hr>
+
+<div class="chart-box">
+    <h3>Monthly Cash Flow</h3>
+    <canvas id="flow-chart" height="160"></canvas>
+</div>
+
+<script>
+(async () => {
+    const data = await (await fetch('/api/flow/monthly')).json();
+    new Chart(document.getElementById('flow-chart'), {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.as_of),
+            datasets: [
+                {
+                    label: 'Income',
+                    data: data.map(d => d.income),
+                    borderColor: '#059669',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    tension: 0.3,
+                    fill: false,
+                },
+                {
+                    label: 'Expenses',
+                    data: data.map(d => d.expenses),
+                    borderColor: '#dc2626',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    tension: 0.3,
+                    fill: false,
+                },
+                {
+                    label: 'Savings',
+                    data: data.map(d => d.savings),
+                    borderColor: '#2563eb',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    tension: 0.3,
+                    fill: false,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            scales: darkScale(false),
+        },
+    });
+})();
+</script>
+{% endblock %}

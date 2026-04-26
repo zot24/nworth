@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Positions — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Positions</h1>
+    <a href="/data?tab=positions" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<dl class="stat-row" style="margin-top: 1.5rem;">
+    <div><dt>Total Invested</dt><dd>${{ "{:.0}"|format(total_invested) }}</dd></div>
+    <div><dt>Current Value</dt><dd>${{ "{:.0}"|format(total_current) }}</dd></div>
+    <div>
+        <dt>Gain / Loss</dt>
+        {% if total_current >= total_invested %}<dd class="green">+${{ "{:.0}"|format(total_current - total_invested) }}</dd>{% else %}<dd class="red">-${{ "{:.0}"|format(total_invested - total_current) }}</dd>{% endif %}
+    </div>
+</dl>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Account</th>
+            <th>Symbol</th>
+            <th>Type</th>
+            <th class="r">Shares</th>
+            <th class="r">Avg Cost</th>
+            <th class="r">Last Price</th>
+            <th class="r">Cost Basis</th>
+            <th class="r">Market Value</th>
+            <th class="r">Gain / Loss</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in positions %}
+        <tr>
+            <td class="name">{{ p.account_name }}</td>
+            <td class="name">{{ p.symbol }}</td>
+            <td class="label">{{ p.type_code }}</td>
+            <td class="r">{{ "{:.2}"|format(p.quantity) }}</td>
+            <td class="r">${{ "{:.2}"|format(p.avg_cost) }}</td>
+            <td class="r">${{ "{:.2}"|format(p.last_price) }}</td>
+            <td class="r">${{ "{:.0}"|format(p.cost_basis) }}</td>
+            <td class="r">${{ "{:.0}"|format(p.market_value) }}</td>
+            {% if p.gain_loss >= 0.0 %}<td class="r green">+${{ "{:.0}"|format(p.gain_loss) }}</td>{% else %}<td class="r red">${{ "{:.0}"|format(p.gain_loss) }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Stocks — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Stocks</h1>
+    <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+<div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.8125rem; color: var(--text-muted);">As of {{ latest_as_of }}</div>
+
+<div style="display: flex; align-items: baseline; gap: 3rem; margin-top: 1.5rem;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400; color: var(--text);">
+        ${{ "{:.0}"|format(total_stock_value) }}
+    </div>
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.9375rem;" class="green">
+        Dividends YTD: ${{ "{:.0}"|format(total_dividends_ytd) }}
+    </div>
+</div>
+
+<hr>
+
+<h2 style="font-family: 'Libre Baskerville', Georgia, serif; font-size: 1.125rem; font-weight: 400; margin-bottom: 1.5rem;">Dividends</h2>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+    <div class="chart-box">
+        <h3>Monthly Dividend Income</h3>
+        <canvas id="div-monthly" height="130"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Yearly Dividend Income</h3>
+        <canvas id="div-yearly" height="130"></canvas>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Quarterly Dividend Income</h3>
+        <canvas id="div-quarterly" height="130"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Year over Year Dividends</h3>
+        <canvas id="div-yoy" height="130"></canvas>
+    </div>
+</div>
+
+<hr>
+
+<h2 style="font-family: 'Libre Baskerville', Georgia, serif; font-size: 1.125rem; font-weight: 400; margin-bottom: 1.5rem;">Portfolio</h2>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+    <div class="chart-box">
+        <h3>Value Over Time</h3>
+        <canvas id="stock-value" height="130"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Holdings Allocation</h3>
+        <canvas id="holdings-donut" height="200"></canvas>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Holding Value</h3>
+        <canvas id="holdings-value" height="150"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Yearly Portfolio Growth Rate</h3>
+        <canvas id="stock-growth" height="150"></canvas>
+    </div>
+</div>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Symbol</th>
+            <th>Account</th>
+            <th class="r">Shares</th>
+            <th class="r">Avg Cost</th>
+            <th class="r">Value</th>
+            <th style="width: 40px;"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in positions %}
+        <tr>
+            <td class="name">{{ p.symbol }}</td>
+            <td class="label">{{ p.account_name }}</td>
+            <td class="r">{{ "{:.2}"|format(p.quantity) }}</td>
+            <td class="r">${{ "{:.2}"|format(p.avg_cost) }}</td>
+            <td class="r">${{ "{:.0}"|format(p.value_usd) }}</td>
+            <td></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+(async () => {
+    // Monthly dividends
+    const divM = await (await fetch('/api/stocks/dividends/monthly')).json();
+    new Chart(document.getElementById('div-monthly'), {
+        type: 'bar',
+        data: {
+            labels: divM.map(d => d.as_of),
+            datasets: [{
+                data: divM.map(d => d.value_usd),
+                backgroundColor: PALETTE[2] + '40',
+                borderColor: PALETTE[2],
+                borderWidth: 1.5, borderRadius: 1,
+            }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: darkScale(false) },
+    });
+
+    // Yearly dividends
+    const divY = await (await fetch('/api/stocks/dividends/yearly')).json();
+    new Chart(document.getElementById('div-yearly'), {
+        type: 'bar',
+        data: {
+            labels: divY.map(d => d.year),
+            datasets: [{
+                data: divY.map(d => d.value_usd),
+                backgroundColor: PALETTE[2] + '50',
+                borderColor: PALETTE[2],
+                borderWidth: 1.5, borderRadius: 1,
+            }],
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { afterLabel: ctx => { const g = divY[ctx.dataIndex].growth_pct; return g != null ? 'Growth: ' + g.toFixed(1) + '%' : ''; } } },
+            },
+            scales: darkScale(false),
+        },
+    });
+
+    // Quarterly dividends
+    const divQ = await (await fetch('/api/stocks/dividends')).json();
+    new Chart(document.getElementById('div-quarterly'), {
+        type: 'bar',
+        data: {
+            labels: divQ.map(d => d.quarter),
+            datasets: [{ data: divQ.map(d => d.value_usd), backgroundColor: PALETTE[0] + '40', borderColor: PALETTE[0], borderWidth: 1.5, borderRadius: 1 }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: darkScale(false) },
+    });
+
+    // Year over Year
+    const divYoY = await (await fetch('/api/stocks/dividends/yoy')).json();
+    const yoyYears = [...new Set(divYoY.map(d => d.year))].sort();
+    const yoyMonths = [...new Set(divYoY.map(d => d.month))].sort();
+    const yoyL = {};
+    divYoY.forEach(d => { yoyL[d.month + '|' + d.year] = d.value_usd; });
+    new Chart(document.getElementById('div-yoy'), {
+        type: 'bar',
+        data: {
+            labels: yoyMonths,
+            datasets: yoyYears.map((yr, i) => ({
+                label: yr, data: yoyMonths.map(m => yoyL[m + '|' + yr] || 0),
+                backgroundColor: PALETTE[i % PALETTE.length] + '50',
+                borderColor: PALETTE[i % PALETTE.length], borderWidth: 1, borderRadius: 1,
+            })),
+        },
+        options: { responsive: true, scales: darkScale(false) },
+    });
+
+    // Value Over Time (stacked area by account)
+    const hist = await (await fetch('/api/stocks/history')).json();
+    const hDates = [...new Set(hist.map(d => d.as_of))].sort();
+    const accounts = [...new Set(hist.map(d => d.account_name))];
+    const hL = {};
+    hist.forEach(d => { hL[d.as_of + '|' + d.account_name] = d.value_usd; });
+    new Chart(document.getElementById('stock-value'), {
+        type: 'line',
+        data: { labels: hDates, datasets: accounts.map((a, i) => areaDataset(a, hDates.map(d => hL[d + '|' + a] || 0), i)) },
+        options: { responsive: true, scales: darkScale() },
+    });
+
+    // Holdings Doughnut
+    const hold = await (await fetch('/api/stocks/holdings')).json();
+    new Chart(document.getElementById('holdings-donut'),
+        doughnutConfig(hold.map(h => h.symbol), hold.map(h => h.market_value))
+    );
+
+    // Holding Value (horizontal bar)
+    new Chart(document.getElementById('holdings-value'), {
+        type: 'bar',
+        data: {
+            labels: hold.map(h => h.symbol),
+            datasets: [{ data: hold.map(h => h.market_value), backgroundColor: hold.map((_, i) => PALETTE[i % PALETTE.length] + '50'), borderColor: hold.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 1.5, borderRadius: 1 }],
+        },
+        options: {
+            indexAxis: 'y', responsive: true, plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: getThemeColors().tick, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: getThemeColors().grid }, border: { display: false } },
+                y: { ticks: { color: getThemeColors().tick, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { display: false }, border: { display: false } },
+            },
+        },
+    });
+
+    // Yearly Growth Rate
+    const gr = await (await fetch('/api/stocks/growth')).json();
+    new Chart(document.getElementById('stock-growth'), {
+        type: 'bar',
+        data: {
+            labels: gr.map(g => g.year),
+            datasets: [{ data: gr.map(g => g.growth_pct), backgroundColor: gr.map(g => g.growth_pct >= 0 ? '#1a7f4b40' : '#c0392b40'), borderColor: gr.map(g => g.growth_pct >= 0 ? '#1a7f4b' : '#c0392b'), borderWidth: 1.5, borderRadius: 1 }],
+        },
+        options: {
+            responsive: true, plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: getThemeColors().tick }, grid: { display: false }, border: { display: false } },
+                y: { ticks: { color: getThemeColors().tick, callback: v => v.toFixed(0) + '%' }, grid: { color: getThemeColors().grid }, border: { display: false } },
+            },
+        },
+    });
+})();
+</script>
+{% endblock %}

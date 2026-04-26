@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Cash &amp; Stables — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Cash &amp; Stables</h1>
+    <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400; color: var(--text); margin-top: 1.5rem;">
+    ${{ "{:.0}"|format(total_combined) }}
+</div>
+
+<dl class="stat-row" style="margin-top: 1.5rem;">
+    <div><dt>Fiat</dt><dd>${{ "{:.0}"|format(total_fiat_usd) }}</dd></div>
+    <div><dt>Stables</dt><dd>${{ "{:.0}"|format(total_stables_usd) }}</dd></div>
+</dl>
+
+<hr>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div class="chart-box">
+        <h3>Cash Over Time</h3>
+        <canvas id="cash-history-chart" height="140"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Currency Breakdown</h3>
+        <canvas id="currency-chart" height="200"></canvas>
+    </div>
+</div>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Account</th>
+            <th>Currency</th>
+            <th class="r">Amount</th>
+            <th class="r">Value USD</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for b in balances %}
+        <tr>
+            <td class="name">{{ b.account_name }}</td>
+            <td class="label">{{ b.symbol }}</td>
+            <td class="r">{{ "{:.2}"|format(b.quantity) }}</td>
+            <td class="r">${{ "{:.2}"|format(b.value_usd) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+(async () => {
+    // Cash Over Time — stacked area
+    const hist = await (await fetch('/api/cash/history')).json();
+    const symbols = [...new Set(hist.map(r => r.symbol))];
+    const dates = [...new Set(hist.map(r => r.as_of))].sort();
+    const lookup = {};
+    hist.forEach(r => { lookup[r.as_of + '|' + r.symbol] = r.value_usd; });
+
+    new Chart(document.getElementById('cash-history-chart'), {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: symbols.map((sym, i) =>
+                areaDataset(sym, dates.map(d => lookup[d + '|' + sym] || 0), i)
+            ),
+        },
+        options: { responsive: true, scales: darkScale() },
+    });
+
+    // Currency Breakdown — doughnut
+    const cLabels = JSON.parse('{{ currency_labels }}');
+    const cValues = JSON.parse('{{ currency_values }}');
+
+    new Chart(document.getElementById('currency-chart'),
+        doughnutConfig(cLabels, cValues)
+    );
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,1253 @@
+openapi: 3.0.3
+info:
+  title: Portfolio Tracker API
+  description: Full REST API for managing portfolio data — accounts, assets, snapshots, positions, income, expenses, and allocation targets.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  # ── Accounts ──
+  /api/v1/accounts:
+    get:
+      summary: List all accounts
+      tags: [Accounts]
+      responses:
+        '200':
+          description: Array of accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Account' }
+    post:
+      summary: Create account
+      tags: [Accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+
+  /api/v1/accounts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get account by ID
+      tags: [Accounts]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+    put:
+      summary: Update account
+      tags: [Accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+    delete:
+      summary: Smart delete account
+      description: |
+        If the account has no referencing snapshots, positions, or transactions, it is
+        permanently removed (`purged: true`). Otherwise it is soft-deleted by setting
+        `active=0` (`deactivated: true`) so historical data stays intact.
+      tags: [Accounts]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteResult' }
+
+  # ── Assets ──
+  /api/v1/assets:
+    get:
+      summary: List all assets
+      tags: [Assets]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Asset' }
+    post:
+      summary: Create asset
+      tags: [Assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+
+  /api/v1/assets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get asset by ID
+      tags: [Assets]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+    put:
+      summary: Update asset
+      tags: [Assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+    delete:
+      summary: Smart delete asset
+      description: |
+        If the asset has no referencing snapshots, positions, or transactions, it is
+        permanently removed (`purged: true`). Otherwise it is soft-deleted by setting
+        `active=0` (`deactivated: true`). `price_history` rows do not block purge — they
+        are market data and cascade-deleted with the asset.
+      tags: [Assets]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteResult' }
+
+  # ── Snapshots ──
+  /api/v1/snapshots:
+    get:
+      summary: List snapshots (latest date by default)
+      tags: [Snapshots]
+      parameters:
+        - name: as_of
+          in: query
+          schema: { type: string, format: date }
+          description: Filter by date (YYYY-MM-DD). Defaults to latest.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Snapshot' }
+    post:
+      summary: Create or upsert snapshot
+      tags: [Snapshots]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SnapshotInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Snapshot' }
+
+  /api/v1/snapshots/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    delete:
+      summary: Delete snapshot
+      tags: [Snapshots]
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/snapshots/trigger:
+    post:
+      summary: Trigger snapshot creation from current positions
+      tags: [Snapshots]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date: { type: string }
+                  snapshots_created: { type: integer }
+
+  # ── Positions ──
+  /api/v1/positions:
+    get:
+      summary: List all positions
+      tags: [Positions]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Position' }
+    post:
+      summary: Create or update position (upsert)
+      tags: [Positions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PositionInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Position' }
+
+  /api/v1/positions/{acct}/{asset}:
+    parameters:
+      - name: acct
+        in: path
+        required: true
+        schema: { type: integer }
+        description: Account ID
+      - name: asset
+        in: path
+        required: true
+        schema: { type: integer }
+        description: Asset ID
+    delete:
+      summary: Delete position
+      tags: [Positions]
+      responses:
+        '204': { description: Deleted }
+
+  # ── Income ──
+  /api/v1/income:
+    get:
+      summary: List all income records
+      tags: [Income]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Income' }
+    post:
+      summary: Create income record
+      tags: [Income]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IncomeInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Income' }
+
+  /api/v1/income/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      summary: Update income record
+      tags: [Income]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IncomeInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Income' }
+    delete:
+      summary: Delete income record
+      tags: [Income]
+      responses:
+        '204': { description: Deleted }
+
+  # ── Expenses ──
+  /api/v1/expenses:
+    get:
+      summary: List all expense records
+      tags: [Expenses]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Expense' }
+    post:
+      summary: Create expense record
+      tags: [Expenses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpenseInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Expense' }
+
+  /api/v1/expenses/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      summary: Update expense record
+      tags: [Expenses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpenseInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Expense' }
+    delete:
+      summary: Delete expense record
+      tags: [Expenses]
+      responses:
+        '204': { description: Deleted }
+
+  # ── Allocation Targets ──
+  /api/v1/targets:
+    get:
+      summary: List allocation targets
+      tags: [Targets]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Target' }
+    post:
+      summary: Create or upsert allocation target
+      tags: [Targets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TargetInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Target' }
+
+  /api/v1/targets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    delete:
+      summary: Delete allocation target
+      tags: [Targets]
+      responses:
+        '204': { description: Deleted }
+
+  # ── Categories (expense classification) ──
+  /api/v1/categories:
+    get:
+      summary: List all categories
+      tags: [Categories]
+      responses:
+        '200': { content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Category' } } } } }
+    post:
+      summary: Create a category
+      description: |
+        Create a top-level or child category. Pass `parent_id` to nest. Color is an optional hex string used in charts.
+      tags: [Categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '201': { content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }
+  /api/v1/categories/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Update a category
+      tags: [Categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }
+    delete:
+      summary: Smart delete a category
+      description: |
+        Hard-deletes when no expenses or child categories reference the row; otherwise soft-deletes (`active=0`).
+      tags: [Categories]
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/DeleteResult' } } } }
+
+  # ── Labels (orthogonal expense tags) ──
+  /api/v1/labels:
+    get:
+      summary: List all labels
+      tags: [Labels]
+      responses:
+        '200': { content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Label' } } } } }
+    post:
+      summary: Create a label
+      tags: [Labels]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelInput' }
+      responses:
+        '201': { content: { application/json: { schema: { $ref: '#/components/schemas/Label' } } } }
+  /api/v1/labels/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Update a label
+      tags: [Labels]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelInput' }
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/Label' } } } }
+    delete:
+      summary: Smart delete a label
+      description: |
+        Hard-deletes when no expenses reference the label; otherwise soft-deletes (`active=0`).
+      tags: [Labels]
+      responses:
+        '200': { content: { application/json: { schema: { $ref: '#/components/schemas/DeleteResult' } } } }
+
+  # ── Expense breakdown helper ──
+  /api/expenses/by-category:
+    get:
+      summary: Expense totals grouped by category
+      description: |
+        Returns the expense total per category for a trailing window. Uncategorized expenses are bucketed
+        under `(uncategorized)` with `category_id: null`.
+      tags: [Expenses]
+      parameters:
+        - name: window
+          in: query
+          description: "Trailing window. Defaults to `month` (last 30 days)."
+          schema: { type: string, enum: [month, quarter, ytd, all], default: month }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    category_id: { type: integer, nullable: true }
+                    category_name: { type: string }
+                    color: { type: string, nullable: true }
+                    amount_usd: { type: number }
+                    count: { type: integer }
+
+  # ── Insights (Action Center analytics) ──
+  /api/insights/summary:
+    get:
+      summary: Bundled Action Center payload
+      description: |
+        One-shot endpoint that powers the homepage. Combines the hero stats (net worth,
+        drift, deployment ratio, mode coherence), recent NW deltas, drift report,
+        concentration report, ranked action list, and compact sentiment badges.
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InsightsSummary' }
+  /api/insights/drift:
+    get:
+      summary: Per-category drift from active targets
+      description: |
+        Computes signed drift in percentage points and USD per category, using the
+        active market mode (bull/crab/bear) determined by majority vote across signals.
+        Excludes the Car category from the tradable denominator.
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriftReport' }
+  /api/insights/concentration:
+    get:
+      summary: Single-asset and aggregate concentration
+      description: |
+        Returns the top single asset by weight, the top-3 aggregate %, the
+        Herfindahl-Hirschman Index (HHI 0–10000), and the effective number of holdings
+        (1 / Σwᵢ²). Excludes Car account and STOCKS_TOTAL synthetic.
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConcentrationReport' }
+  /api/insights/networth/deltas:
+    get:
+      summary: Net-worth deltas across windows
+      description: |
+        Returns the current NW plus 7d, 30d, 90d, and YTD signed deltas (USD + %),
+        each anchored to the closest snapshot at-or-before the target date. Also
+        returns a sparkline series of the last ~30 daily NW points for the hero chart.
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeltasReport' }
+  /api/insights/actions:
+    get:
+      summary: Ranked action recommendations
+      description: |
+        Generates a list of recommended actions (rebalance, concentration trim, stale
+        snapshot warning, etc.) and ranks them by an urgency score (0–100) combining
+        drift, concentration, sentiment alignment, and recency. Suppresses suggestions
+        below thresholds (drift < 2pp or < $1,000; trade size < max($500, 0.5% of NW)).
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActionsReport' }
+  /api/insights/wealth:
+    get:
+      summary: Unified holdings snapshot for the /wealth page
+      description: |
+        Returns one row per (asset, account) on the latest snapshot date. Each holding
+        carries category, % of portfolio, the category's drift in pp, the last ~30
+        daily price closes (for sparklines), and the 24-hour price change %.
+      tags: [Insights]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WealthReport' }
+
+components:
+  schemas:
+    DeleteResult:
+      type: object
+      description: |
+        Result of a smart-delete on accounts/assets. The endpoint hard-deletes when no
+        snapshots/positions/transactions reference the row, otherwise soft-deletes.
+      properties:
+        id:
+          type: integer
+          example: 5
+        purged:
+          type: boolean
+          description: "True when the row was permanently removed."
+          example: true
+        deactivated:
+          type: boolean
+          description: "True when the row was soft-deleted (active=0) due to existing references."
+          example: false
+
+    Account:
+      type: object
+      description: "A financial account — a brokerage, bank, exchange, or physical asset container. Each account can hold multiple assets."
+      properties:
+        id:
+          type: integer
+          description: "Auto-generated unique identifier"
+          example: 2
+        name:
+          type: string
+          description: "Display name for this account. Must be unique."
+          example: "MyBroker"
+        type_code:
+          type: string
+          description: |
+            Account classification:
+            - `broker` — Stock brokerage
+            - `bank` — Traditional bank
+            - `exchange` — Crypto exchange
+            - `cash` — Physical cash or misc cash-like account
+            - `crypto` — Aggregated crypto account (single bucket for all on-chain holdings)
+            - `asset` — Physical asset like a car
+          enum: [broker, bank, exchange, cash, crypto, asset]
+          example: "broker"
+        institution:
+          type: string
+          nullable: true
+          description: "The company/institution behind this account. Used for display only."
+          example: "Example Brokerage Inc."
+        chain_code:
+          type: string
+          nullable: true
+          description: |
+            Blockchain network this account operates on (only for crypto/on-chain accounts).
+            Values: `bitcoin`, `ethereum`, `solana`, `cosmos`, `kujira`. Leave null for traditional finance accounts.
+          example: "solana"
+        active:
+          type: integer
+          description: "1 = active, 0 = soft-deleted (hidden from UI but preserved in history)"
+          example: 1
+        notes:
+          type: string
+          nullable: true
+          description: "Free-text notes"
+          example: "Main US brokerage"
+
+    AccountInput:
+      type: object
+      description: "Fields for creating or updating an account"
+      required: [name, type_code]
+      properties:
+        name:
+          type: string
+          description: "Unique display name"
+          example: "MyExchange"
+        type_code:
+          type: string
+          description: "Account type: broker, bank, exchange, cash, crypto, or asset"
+          enum: [broker, bank, exchange, cash, crypto, asset]
+          example: "exchange"
+        institution:
+          type: string
+          description: "Company name (optional)"
+          example: "Example Exchange Holdings"
+        chain_code:
+          type: string
+          description: "Blockchain network (optional, e.g. solana, ethereum)"
+          example: null
+        notes:
+          type: string
+          description: "Free-text notes (optional)"
+          example: "Spot + futures"
+
+    Asset:
+      type: object
+      description: "A tradeable asset — a stock ticker, crypto token, fiat currency, stablecoin, or NFT."
+      properties:
+        id:
+          type: integer
+          example: 15
+        symbol:
+          type: string
+          description: "Ticker/token symbol. Unique within its type_code."
+          example: "BTC"
+        name:
+          type: string
+          nullable: true
+          description: "Human-readable full name"
+          example: "Bitcoin"
+        type_code:
+          type: string
+          description: |
+            Asset classification:
+            - `crypto` — Cryptocurrency token (BTC, ETH, SOL, JUP, KMNO...)
+            - `stock` — Stock or ETF
+            - `stable` — Stablecoin (USDC)
+            - `fiat` — Fiat currency (USD, EUR, GBP, PYG)
+            - `nft` — Non-fungible token
+          enum: [crypto, stock, stable, fiat, nft]
+          example: "crypto"
+        chain_code:
+          type: string
+          nullable: true
+          description: "Blockchain this asset lives on (for crypto only). Values: bitcoin, ethereum, solana, cosmos"
+          example: "bitcoin"
+        risk_code:
+          type: string
+          nullable: true
+          description: |
+            Risk classification (for crypto):
+            - `cat1_safe` — Low risk, blue chip (BTC, ETH, SOL)
+            - `cat2_medium` — Medium risk (KMNO, PYTH, PRCL, STX)
+            - `cat3_high` — High risk, speculative (JUP, BONK, LUNA)
+            Leave null for non-crypto assets.
+          enum: [cat1_safe, cat2_medium, cat3_high]
+          example: "cat1_safe"
+        coingecko_id:
+          type: string
+          nullable: true
+          description: "CoinGecko API identifier. Used by the pricefeed microservice to fetch prices. Find IDs at coingecko.com/en/api."
+          example: "bitcoin"
+        yahoo_ticker:
+          type: string
+          nullable: true
+          description: "Yahoo Finance ticker. Used by the pricefeed for stock prices."
+          example: "VOO"
+        target_pct:
+          type: number
+          nullable: true
+          description: "Target allocation as a decimal. 0.70 = 70% of its category. Used in the crypto actual-vs-target chart."
+          example: 0.70
+        is_stable:
+          type: integer
+          description: "1 = stablecoin (USDC), 0 = normal asset"
+          example: 0
+        active:
+          type: integer
+          description: "1 = active, 0 = deactivated"
+          example: 1
+
+    AssetInput:
+      type: object
+      description: "Fields for creating or updating an asset"
+      required: [symbol, type_code]
+      properties:
+        symbol:
+          type: string
+          example: "SOL"
+        name:
+          type: string
+          example: "Solana"
+        type_code:
+          type: string
+          enum: [crypto, stock, stable, fiat, nft]
+          example: "crypto"
+        chain_code:
+          type: string
+          description: "Blockchain (e.g. solana, ethereum, bitcoin). Null for stocks/fiat."
+          example: "solana"
+        risk_code:
+          type: string
+          description: "Risk level: cat1_safe, cat2_medium, cat3_high, or empty"
+          enum: ["", cat1_safe, cat2_medium, cat3_high]
+          example: "cat1_safe"
+        coingecko_id:
+          type: string
+          description: "CoinGecko ID for price fetching (e.g. 'solana', 'bitcoin', 'ethereum')"
+          example: "solana"
+        yahoo_ticker:
+          type: string
+          description: "Yahoo Finance ticker for stock prices (e.g. 'VOO', 'AAPL')"
+          example: null
+        target_pct:
+          type: number
+          description: "Target allocation as decimal (0.30 = 30%). Null if no target."
+          example: 0.30
+        is_stable:
+          type: boolean
+          description: "true for stablecoins (USDC), false for everything else"
+          example: false
+
+    Snapshot:
+      type: object
+      description: |
+        A point-in-time record: "On this date, this account held this much of this asset, worth this much USD."
+        Snapshots are the core data — every chart and net worth calculation reads from them.
+        Created by: xlsx import (historical), pricefeed (daily), manual trigger, or API.
+      properties:
+        id:
+          type: integer
+          example: 1234
+        as_of:
+          type: string
+          format: date
+          description: "Snapshot date in ISO format"
+          example: "2026-04-01"
+        account_id:
+          type: integer
+          description: "References accounts.id"
+          example: 2
+        asset_id:
+          type: integer
+          description: "References assets.id"
+          example: 15
+        quantity:
+          type: number
+          description: "Amount of the asset held (shares, tokens, or currency units)"
+          example: 0.5
+        price_usd:
+          type: number
+          nullable: true
+          description: "Unit price in USD at the time of the snapshot"
+          example: 95000.00
+        value_usd:
+          type: number
+          description: "Total USD value (quantity x price). Denormalized for query speed."
+          example: 47500.00
+        source:
+          type: string
+          nullable: true
+          description: "How this snapshot was created: xlsx_import:cash, xlsx_import:stock, xlsx_import:crypto, pricefeed, manual, api"
+          example: "api"
+
+    SnapshotInput:
+      type: object
+      description: "Create a snapshot. Upserts on (as_of + account_id + asset_id) — if a row already exists for that date/account/asset combo, it updates instead of inserting."
+      required: [as_of, account_id, asset_id, quantity, value_usd]
+      properties:
+        as_of:
+          type: string
+          format: date
+          description: "Date for this snapshot (YYYY-MM-DD)"
+          example: "2026-04-25"
+        account_id:
+          type: integer
+          description: "Account ID (from GET /api/v1/accounts)"
+          example: 22
+        asset_id:
+          type: integer
+          description: "Asset ID (from GET /api/v1/assets)"
+          example: 15
+        quantity:
+          type: number
+          description: "How much of the asset is held"
+          example: 0.5
+        price_usd:
+          type: number
+          description: "Price per unit in USD (optional, for computing value)"
+          example: 95000.00
+        value_usd:
+          type: number
+          description: "Total USD value of this holding"
+          example: 47500.00
+
+    Position:
+      type: object
+      description: |
+        Current holding — what you own RIGHT NOW. Unlike snapshots (historical time-series),
+        positions represent the latest state. Updated by the pricefeed or manually.
+        Primary key is (account_id, asset_id) — one position per account+asset pair.
+      properties:
+        account_id:
+          type: integer
+          description: "Account that holds this position"
+          example: 2
+        asset_id:
+          type: integer
+          description: "Asset being held"
+          example: 9
+        quantity:
+          type: number
+          description: "Number of shares/tokens/units"
+          example: 399.72
+        avg_cost:
+          type: number
+          nullable: true
+          description: "Average cost per unit (cost basis). Used for P&L calculation."
+          example: 540.00
+        last_price:
+          type: number
+          nullable: true
+          description: "Most recent price from pricefeed. 0 if pricefeed hasn't run yet."
+          example: 605.00
+        value_usd:
+          type: number
+          description: "Current total value (quantity x last_price)"
+          example: 241918.60
+        as_of:
+          type: string
+          description: "Date of the last price update"
+          example: "2026-04-25"
+
+    PositionInput:
+      type: object
+      description: "Create or update a position. Upserts on (account_id, asset_id)."
+      required: [account_id, asset_id, quantity, value_usd]
+      properties:
+        account_id:
+          type: integer
+          description: "Account ID"
+          example: 2
+        asset_id:
+          type: integer
+          description: "Asset ID"
+          example: 9
+        quantity:
+          type: number
+          description: "Number of shares/tokens"
+          example: 400.00
+        avg_cost:
+          type: number
+          description: "Average purchase price per unit"
+          example: 540.00
+        last_price:
+          type: number
+          description: "Current market price per unit (optional, updated by pricefeed)"
+          example: 605.00
+        value_usd:
+          type: number
+          description: "Total current value"
+          example: 242000.00
+
+    Income:
+      type: object
+      description: "Monthly income record tracking salary, bonus, taxes, and employer."
+      properties:
+        id:
+          type: integer
+          example: 74
+        as_of:
+          type: string
+          format: date
+          description: "Month this income is for (typically end-of-month date like 2026-04-30)"
+          example: "2026-04-30"
+        salary_usd:
+          type: number
+          description: "Monthly gross salary in USD"
+          example: 8000.00
+        per_year_usd:
+          type: number
+          description: "Annual salary (informational, from xlsx import)"
+          example: 96000.00
+        bonus_usd:
+          type: number
+          description: "Bonus received this month"
+          example: 0.00
+        taxes_usd:
+          type: number
+          description: "Taxes withheld this month"
+          example: 2000.00
+        company:
+          type: string
+          nullable: true
+          description: "Employer name"
+          example: "Acme Corp"
+
+    IncomeInput:
+      type: object
+      description: "Create or update an income record. Upserts on as_of date."
+      required: [as_of, salary_usd]
+      properties:
+        as_of:
+          type: string
+          format: date
+          description: "Month date (YYYY-MM-DD, typically end of month)"
+          example: "2026-04-30"
+        salary_usd:
+          type: number
+          description: "Gross monthly salary"
+          example: 8000.00
+        bonus_usd:
+          type: number
+          description: "Monthly bonus (default 0)"
+          example: 0.00
+        taxes_usd:
+          type: number
+          description: "Taxes withheld (default 0)"
+          example: 2000.00
+        company:
+          type: string
+          description: "Employer name"
+          example: "Acme Corp"
+
+    Expense:
+      type: object
+      description: "Expense record with optional category and labels."
+      properties:
+        id: { type: integer, example: 73 }
+        as_of: { type: string, format: date, example: "2026-04-30" }
+        amount_usd: { type: number, example: 42.50 }
+        place: { type: string, nullable: true, example: "Sushi-X" }
+        notes: { type: string, nullable: true, example: null }
+        category_id: { type: integer, nullable: true, example: 4 }
+        category_name: { type: string, nullable: true, description: "Joined from categories.name", example: "Restaurants" }
+        labels:
+          type: array
+          description: "Labels applied to this expense"
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+
+    ExpenseInput:
+      type: object
+      description: |
+        Create or update an expense. Upserts on as_of date. Pass `label_ids` to replace the
+        full set of labels on this expense (omit to leave existing labels untouched on update).
+      required: [as_of, amount_usd]
+      properties:
+        as_of: { type: string, format: date, example: "2026-04-26" }
+        amount_usd: { type: number, example: 42.50 }
+        place: { type: string, example: "Sushi-X" }
+        category_id: { type: integer, nullable: true, example: 4 }
+        label_ids:
+          type: array
+          items: { type: integer }
+          description: "Replaces existing labels on save. Send [] to clear."
+          example: [1, 2]
+
+    Category:
+      type: object
+      description: "Expense category. Supports parent-child hierarchy via parent_id."
+      properties:
+        id: { type: integer, example: 4 }
+        name: { type: string, example: "Restaurants" }
+        parent_id: { type: integer, nullable: true, example: 1, description: "Null = top-level" }
+        color: { type: string, nullable: true, example: "#c0392b" }
+        active: { type: integer, enum: [0, 1], example: 1 }
+
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: "Restaurants" }
+        parent_id: { type: integer, nullable: true, example: 1 }
+        color: { type: string, nullable: true, example: "#c0392b" }
+
+    Label:
+      type: object
+      description: "Orthogonal tag applied to expenses."
+      properties:
+        id: { type: integer, example: 2 }
+        name: { type: string, example: "vacation-2026" }
+        color: { type: string, nullable: true, example: "#2563eb" }
+        active: { type: integer, enum: [0, 1], example: 1 }
+
+    LabelInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: "vacation-2026" }
+        color: { type: string, nullable: true, example: "#2563eb" }
+
+    Target:
+      type: object
+      description: |
+        Portfolio allocation target. Defines what percentage of total net worth should be
+        in each category for a given market mode (bull/crab/bear). Each category has 3 rows,
+        one per mode. The active mode is computed from /api/market/sentiment.
+      properties:
+        id:
+          type: integer
+          example: 1
+        category:
+          type: string
+          description: |
+            Category name matching the net worth category mapping:
+            - `stocks` — Stock & ETF holdings
+            - `stable_yielding` — Stablecoins earning yield (USDC)
+            - `crypto` — Crypto tokens (BTC, SOL, etc.)
+            - `cash` — Fiat cash across all banks
+            - `car` — Vehicle value
+          example: "stocks"
+        market_mode:
+          type: string
+          enum: [bull, crab, bear]
+          description: |
+            Market regime this target applies to:
+            - `bull` — uptrend, favor growth assets
+            - `crab` — sideways/mixed, balanced default
+            - `bear` — downtrend, favor safety
+          example: "crab"
+        target_pct:
+          type: number
+          description: "Target allocation as decimal. 0.45 = 45% of total net worth."
+          example: 0.45
+        notes:
+          type: string
+          nullable: true
+          description: "Free-text notes about this target"
+          example: "Large cap index funds"
+
+    TargetInput:
+      type: object
+      description: "Create or update an allocation target. Upserts on (category, market_mode)."
+      required: [category, target_pct]
+      properties:
+        category:
+          type: string
+          description: "Category name (stocks, stable_yielding, crypto, cash, car)"
+          example: "stocks"
+        market_mode:
+          type: string
+          enum: [bull, crab, bear]
+          description: "Market regime. Defaults to 'crab' if omitted."
+          example: "bull"
+        target_pct:
+          type: number
+          description: "Target as decimal (0.45 = 45%)"
+          example: 0.45
+        notes:
+          type: string
+          description: "Optional notes"
+          example: "Large cap index funds"
+
+    InsightsSummary:
+      type: object
+      description: "Bundled payload powering the Action Center homepage."
+      properties:
+        stats: { $ref: "#/components/schemas/SummaryStats" }
+        deltas: { $ref: "#/components/schemas/DeltasReport" }
+        drift: { $ref: "#/components/schemas/DriftReport" }
+        concentration: { $ref: "#/components/schemas/ConcentrationReport" }
+        actions: { $ref: "#/components/schemas/ActionsReport" }
+        sentiment_compact:
+          type: array
+          items: { $ref: "#/components/schemas/SentimentBadge" }
+
+    SummaryStats:
+      type: object
+      properties:
+        net_worth: { type: number, example: 405984 }
+        as_of: { type: string, example: "2026-04-25" }
+        abs_drift_pp: { type: number, example: 7.4, description: "Sum of absolute category drift / 2 (rebalance distance)." }
+        deployment_ratio: { type: number, example: 0.85, description: "(stocks + crypto + stable_yielding) / tradable NW." }
+        active_mode: { type: string, enum: [bull, crab, bear], example: "crab" }
+        mode_coherence:
+          type: object
+          properties:
+            configured: { type: string }
+            stocks: { type: string, description: "VOO signal" }
+            crypto: { type: string, description: "BTC signal" }
+            aligned: { type: boolean }
+
+    DriftReport:
+      type: object
+      properties:
+        total_value: { type: number }
+        tradable_value: { type: number, description: "Total NW minus the Car category." }
+        active_mode: { type: string }
+        abs_drift_pp: { type: number }
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              category: { type: string }
+              current_value: { type: number }
+              current_pct: { type: number }
+              target_pct: { type: number }
+              drift_pp: { type: number, description: "Signed; positive = over target." }
+              drift_usd: { type: number }
+              adjustment_usd: { type: number, description: "Signed; positive = buy, negative = sell." }
+              tradable: { type: boolean }
+
+    ConcentrationReport:
+      type: object
+      properties:
+        total_value: { type: number }
+        top1:
+          type: object
+          nullable: true
+          properties:
+            symbol: { type: string }
+            value_usd: { type: number }
+            pct: { type: number }
+        top3_pct: { type: number }
+        hhi: { type: number, description: "0-10000. <1500 considered diversified." }
+        n_effective: { type: number, description: "1 / Sigma weight squared." }
+
+    DeltasReport:
+      type: object
+      properties:
+        current: { type: number }
+        current_as_of: { type: string }
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string, example: "30d" }
+              days: { type: integer }
+              from_value: { type: number }
+              to_value: { type: number }
+              delta_usd: { type: number }
+              delta_pct: { type: number }
+        sparkline:
+          type: array
+          items:
+            type: array
+            description: "[date, value_usd] pairs."
+
+    ActionsReport:
+      type: object
+      properties:
+        generated_at: { type: string, format: date }
+        active_mode: { type: string }
+        stale_data: { type: boolean }
+        stale_days: { type: integer }
+        actions:
+          type: array
+          items: { $ref: "#/components/schemas/ActionCard" }
+
+    ActionCard:
+      type: object
+      description: "One recommended action with an urgency score."
+      properties:
+        id: { type: string, example: "drift:crypto" }
+        kind: { type: string, enum: [rebalance, concentration, cash_drag, snapshot, regime] }
+        priority: { type: string, enum: [critical, suggested, info] }
+        urgency: { type: number, description: "0-100." }
+        headline: { type: string }
+        body: { type: string }
+        category: { type: string, nullable: true }
+        amount_usd: { type: number, nullable: true }
+        direction: { type: string, nullable: true, enum: [buy, sell, snapshot] }
+
+    SentimentBadge:
+      type: object
+      properties:
+        category: { type: string }
+        signal: { type: string, enum: [bull, crab, bear, pending] }
+        status: { type: string, enum: [active, partial, insufficient_data] }
+
+    WealthReport:
+      type: object
+      properties:
+        as_of: { type: string }
+        total_value: { type: number }
+        holdings:
+          type: array
+          items: { $ref: "#/components/schemas/Holding" }
+
+    Holding:
+      type: object
+      properties:
+        symbol: { type: string }
+        name: { type: string, nullable: true }
+        type_code: { type: string }
+        category: { type: string }
+        account_name: { type: string }
+        quantity: { type: number }
+        last_price: { type: number, nullable: true }
+        value_usd: { type: number }
+        pct_of_portfolio: { type: number }
+        category_drift_pp: { type: number, description: "Signed drift of the holdings parent category." }
+        recent_prices:
+          type: array
+          items: { type: number }
+          description: "Last ~30 daily closes for sparkline."
+        price_change_pct_24h: { type: number, nullable: true }

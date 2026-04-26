@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Wealth — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Wealth</h1>
+    <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+<p class="secondary" style="font-size: 0.8125rem; margin-bottom: 2rem;">Every position you hold across stocks, crypto, stables, cash, and physical assets.</p>
+
+{% if !has_data %}
+<div style="text-align: center; padding: 3rem 1rem; color: var(--text-muted); border: 1px solid var(--border);">
+    <p style="font-size: 0.875rem; margin-bottom: 1rem;">No snapshots yet — add accounts/assets and snapshot to populate.</p>
+    <p style="font-size: 0.8125rem;">
+        <a href="/accounts" style="color: var(--text); text-decoration: underline;">Add account</a>
+        &nbsp;·&nbsp;
+        <a href="/assets" style="color: var(--text); text-decoration: underline;">Add asset</a>
+    </p>
+</div>
+{% else %}
+
+<!-- Filter + search bar -->
+<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
+    <div id="type-filter" style="display: flex; gap: 1.25rem; font-size: 0.8125rem;">
+        <a class="filter-link active" data-type="all" style="cursor: pointer; color: var(--text); text-decoration: underline;">all</a>
+        <a class="filter-link" data-type="stocks" style="cursor: pointer; color: var(--text-secondary);">stocks</a>
+        <a class="filter-link" data-type="crypto" style="cursor: pointer; color: var(--text-secondary);">crypto</a>
+        <a class="filter-link" data-type="stable_yielding" style="cursor: pointer; color: var(--text-secondary);">stables</a>
+        <a class="filter-link" data-type="cash" style="cursor: pointer; color: var(--text-secondary);">cash</a>
+        <a class="filter-link" data-type="car" style="cursor: pointer; color: var(--text-secondary);">car</a>
+    </div>
+    <input type="search" id="wealth-search" placeholder="search symbol or account…  /" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; padding: 6px 10px; background: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 2px; width: 260px; outline: none;">
+</div>
+
+<!-- Summary line -->
+<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; color: var(--text-secondary);">
+    <span id="wealth-summary">—</span>
+    <span style="color: var(--text-muted);">as of <span id="wealth-asof">—</span></span>
+</div>
+
+<table id="wealth-table">
+    <thead>
+        <tr>
+            <th data-sort="symbol" style="cursor: pointer;">Symbol</th>
+            <th data-sort="name" style="cursor: pointer;">Name</th>
+            <th data-sort="account_name" style="cursor: pointer;">Account</th>
+            <th class="r" data-sort="quantity" style="cursor: pointer;">Qty</th>
+            <th class="r" data-sort="last_price" style="cursor: pointer;">Price</th>
+            <th class="r" data-sort="value_usd" style="cursor: pointer;">Value</th>
+            <th class="r" data-sort="pct_of_portfolio" style="cursor: pointer;">% port</th>
+            <th class="r" data-sort="category_drift_pp" style="cursor: pointer;">Cat drift</th>
+            <th class="r">30d</th>
+        </tr>
+    </thead>
+    <tbody id="wealth-body">
+        <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading…</td></tr>
+    </tbody>
+</table>
+
+<script>
+let WEALTH_DATA = [];
+let CURRENT_FILTER = 'all';
+let CURRENT_SORT = { key: 'value_usd', dir: 'desc' };
+
+(async () => {
+    const data = await (await fetch('/api/insights/wealth')).json();
+    WEALTH_DATA = data.holdings;
+    document.getElementById('wealth-asof').textContent = data.as_of || '—';
+    document.getElementById('wealth-summary').textContent = `${data.holdings.length} positions · $${Math.round(data.total_value).toLocaleString()} total`;
+    render();
+})();
+
+function applySortAndFilter() {
+    let rows = WEALTH_DATA.slice();
+    if (CURRENT_FILTER !== 'all') rows = rows.filter(r => r.category === CURRENT_FILTER);
+    const q = (document.getElementById('wealth-search').value || '').toLowerCase().trim();
+    if (q) rows = rows.filter(r =>
+        r.symbol.toLowerCase().includes(q) ||
+        (r.name || '').toLowerCase().includes(q) ||
+        r.account_name.toLowerCase().includes(q)
+    );
+    const { key, dir } = CURRENT_SORT;
+    rows.sort((a, b) => {
+        const av = a[key], bv = b[key];
+        if (typeof av === 'number') return dir === 'asc' ? av - bv : bv - av;
+        return dir === 'asc' ? String(av || '').localeCompare(String(bv || '')) : String(bv || '').localeCompare(String(av || ''));
+    });
+    return rows;
+}
+
+function render() {
+    const rows = applySortAndFilter();
+    const body = document.getElementById('wealth-body');
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No matching positions.</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.map(r => {
+        const change24h = r.price_change_pct_24h;
+        const change24Html = change24h != null
+            ? `<div style="font-size: 0.625rem; color: ${change24h > 0 ? 'var(--pos)' : change24h < 0 ? 'var(--neg)' : 'var(--text-muted)'};">${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}%</div>`
+            : '';
+        const priceHtml = r.last_price != null
+            ? `$${r.last_price.toLocaleString(undefined, {maximumFractionDigits: r.last_price < 10 ? 4 : 2})}${change24Html}`
+            : '<span class="muted">—</span>';
+        return `
+            <tr>
+                <td class="name" style="font-family: 'IBM Plex Mono', monospace;">${escapeHtml(r.symbol)} <span style="font-size: 0.625rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-left: 4px;">${typeChip(r.category)}</span></td>
+                <td>${escapeHtml(r.name || '')}</td>
+                <td style="color: var(--text-secondary); font-size: 0.75rem;">${escapeHtml(r.account_name)}</td>
+                <td class="r">${formatQty(r.quantity)}</td>
+                <td class="r">${priceHtml}</td>
+                <td class="r" style="font-weight: 500; color: var(--text);">$${Math.round(r.value_usd).toLocaleString()}</td>
+                <td class="r">${(r.pct_of_portfolio * 100).toFixed(2)}%</td>
+                <td class="r">${driftBar(r.category_drift_pp)}</td>
+                <td class="r"><canvas class="sparkline" width="80" height="24" data-prices='${JSON.stringify(r.recent_prices)}'></canvas></td>
+            </tr>
+        `;
+    }).join('');
+    drawSparklines();
+}
+
+function driftBar(pp) {
+    const abs = Math.abs(pp);
+    const fillCls = abs >= 20 ? 'alert' : abs >= 10 ? 'warn' : '';
+    const dirCls = pp > 0 ? 'over' : 'under';
+    const widthPct = Math.min(50, abs * 5); // 10pp = max 50% half-width
+    const sign = pp >= 0 ? '+' : '−';
+    if (abs < 0.05) {
+        return `<div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.6875rem; color: var(--text-muted);">·</div>`;
+    }
+    return `
+        <div style="display: inline-flex; align-items: center; gap: 6px;">
+            <div class="drift-bar">
+                <div class="track"></div>
+                <div class="axis"></div>
+                <div class="fill ${dirCls} ${fillCls}" style="width: ${widthPct}%;"></div>
+            </div>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.6875rem; color: var(--text-secondary);">${sign}${abs.toFixed(1)}pp</span>
+        </div>
+    `;
+}
+
+function drawSparklines() {
+    const lineColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+    const posColor = getComputedStyle(document.documentElement).getPropertyValue('--pos').trim();
+    const negColor = getComputedStyle(document.documentElement).getPropertyValue('--neg').trim();
+    document.querySelectorAll('canvas.sparkline').forEach(canvas => {
+        const prices = JSON.parse(canvas.dataset.prices || '[]');
+        if (prices.length < 2) {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('—', canvas.width / 2, canvas.height / 2 + 4);
+            return;
+        }
+        const start = prices[0], end = prices[prices.length - 1];
+        const color = end > start * 1.005 ? posColor : end < start * 0.995 ? negColor : lineColor;
+        const min = Math.min(...prices), max = Math.max(...prices), range = max - min || 1;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.lineWidth = 1.25;
+        ctx.strokeStyle = color;
+        prices.forEach((p, i) => {
+            const x = (i / (prices.length - 1)) * (canvas.width - 4) + 2;
+            const y = canvas.height - 2 - ((p - min) / range) * (canvas.height - 4);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        // last-point dot
+        const lx = canvas.width - 2;
+        const ly = canvas.height - 2 - ((end - min) / range) * (canvas.height - 4);
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(lx, ly, 1.5, 0, Math.PI * 2); ctx.fill();
+    });
+}
+
+function typeChip(cat) {
+    return cat === 'stocks' ? 'STK' : cat === 'crypto' ? 'CRY' : cat === 'stable_yielding' ? 'STA' : cat === 'cash' ? 'FIAT' : cat === 'car' ? 'PHY' : cat;
+}
+
+function formatQty(q) {
+    if (q === 0) return '0';
+    if (Math.abs(q) >= 1) return q.toLocaleString(undefined, {maximumFractionDigits: 4});
+    return q.toLocaleString(undefined, {maximumFractionDigits: 6});
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// Filter clicks
+document.querySelectorAll('.filter-link').forEach(a => {
+    a.addEventListener('click', e => {
+        document.querySelectorAll('.filter-link').forEach(x => {
+            x.style.color = 'var(--text-secondary)';
+            x.style.textDecoration = 'none';
+        });
+        a.style.color = 'var(--text)';
+        a.style.textDecoration = 'underline';
+        CURRENT_FILTER = a.dataset.type;
+        render();
+    });
+});
+
+// Search input
+document.getElementById('wealth-search').addEventListener('input', render);
+
+// Sort clicks
+document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (CURRENT_SORT.key === key) CURRENT_SORT.dir = CURRENT_SORT.dir === 'asc' ? 'desc' : 'asc';
+        else CURRENT_SORT = { key, dir: 'desc' };
+        render();
+    });
+});
+
+// `/` shortcut focuses search
+document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        document.getElementById('wealth-search').focus();
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

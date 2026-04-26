@@ -1,0 +1,73 @@
+[package]
+name = "portfolio-tracker"
+version = "0.1.0"
+edition = "2021"
+authors = ["Papi <sotoisra24@gmail.com>"]
+description = "Self-hosted portfolio tracker (crypto + stocks + cash/stables + loans)"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.38", features = ["full"] }
+
+# Web
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.5", features = ["trace", "fs", "compression-gzip"] }
+hyper = { version = "1.4", features = ["full"] }
+
+# Templates
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.4"
+
+# DB
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "chrono",
+    "macros",
+    "migrate",
+    "rust_decimal",
+] }
+
+# HTTP client for price pulls
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Errors / config / logging
+anyhow = "1"
+thiserror = "1"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Dates + money
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.35", features = ["serde-with-str"] }
+
+[[bin]]
+name = "nworth-web"
+path = "src/main.rs"
+
+[[bin]]
+name = "nworth-feed"
+path = "src/bin/pricefeed.rs"
+
+[[bin]]
+name = "nworth-cli"
+path = "src/bin/cli.rs"
+
+[dev-dependencies]
+tokio = { version = "1.38", features = ["full", "test-util"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

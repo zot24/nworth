@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    container_name: nworth-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      BIND_ADDR: 0.0.0.0:8080
+      DATABASE_URL: "sqlite:///app/data/portfolio.db?mode=rwc"
+      RUST_LOG: info
+      COINGECKO_API_KEY: "${COINGECKO_API_KEY:-}"
+      HELIUS_RPC_URL: "${HELIUS_RPC_URL:-}"
+    volumes:
+      - ./data:/app/data

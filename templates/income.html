@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Income — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Income</h1>
+    <a href="/data?tab=income" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem;">YTD Net Income</div>
+    <div class="green" style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400;">${{ "{:.0}"|format(current_year_net) }}</div>
+</div>
+
+<dl class="stat-row">
+    <div>
+        <dt>YTD Gross</dt>
+        <dd>${{ "{:.0}"|format(current_year_gross) }}</dd>
+    </div>
+    <div>
+        <dt>YTD Taxes</dt>
+        <dd class="red">${{ "{:.0}"|format(current_year_taxes) }}</dd>
+    </div>
+    <div>
+        <dt>Company</dt>
+        <dd style="font-family: 'Source Sans 3', sans-serif;">{{ latest_company }}</dd>
+    </div>
+</dl>
+
+<hr>
+
+<div class="chart-box">
+    <h3>Monthly Income Breakdown</h3>
+    <canvas id="income-chart" height="150"></canvas>
+</div>
+
+<hr>
+
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Company</th>
+            <th class="r">Salary</th>
+            <th class="r">Bonus</th>
+            <th class="r">Taxes</th>
+            <th class="r">Net</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.as_of }}</td>
+            <td class="label">{{ r.company }}</td>
+            <td class="r">${{ "{:.2}"|format(r.salary_usd) }}</td>
+            <td class="r">${{ "{:.2}"|format(r.bonus_usd) }}</td>
+            <td class="r red">${{ "{:.2}"|format(r.taxes_usd) }}</td>
+            <td class="r green">${{ "{:.2}"|format(r.salary_usd + r.bonus_usd - r.taxes_usd) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+(async () => {
+    const data = await (await fetch('/api/income/monthly')).json();
+    new Chart(document.getElementById('income-chart'), {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.as_of),
+            datasets: [
+                {
+                    label: 'Salary',
+                    data: data.map(d => d.salary_usd),
+                    backgroundColor: PALETTE[0],
+                    borderWidth: 0,
+                },
+                {
+                    label: 'Bonus',
+                    data: data.map(d => d.bonus_usd),
+                    backgroundColor: PALETTE[2],
+                    borderWidth: 0,
+                },
+                {
+                    label: 'Taxes',
+                    data: data.map(d => d.taxes_usd),
+                    backgroundColor: PALETTE[4],
+                    borderWidth: 0,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            scales: darkScale(false),
+        },
+    });
+})();
+</script>
+{% endblock %}

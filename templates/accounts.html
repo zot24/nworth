@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Accounts — Portfolio{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">Accounts <span class="muted" style="font-family: 'Source Sans 3', sans-serif; font-size: 1rem;">({{ accounts.len() }})</span></h1>
+    <a href="/data?tab=accounts" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Institution</th>
+            <th>Chain</th>
+            <th>Notes</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in accounts %}
+        <tr>
+            <td class="name"><a href="/accounts/{{ a.id }}" style="color: var(--text); text-decoration: underline;">{{ a.name }}</a></td>
+            <td class="label">{{ a.type_code }}</td>
+            <td class="label">{{ a.institution.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">{{ a.chain_code.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">{{ a.notes.as_deref().unwrap_or("\u{2014}") }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
