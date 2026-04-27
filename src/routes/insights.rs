@@ -405,7 +405,7 @@ async fn compute_actions(pool: &SqlitePool) -> Result<ActionsReport, AppError> {
             priority: tier(urgency).into(),
             urgency,
             headline: format!("Update {display_name} value — last set {label}"),
-            body: "Owned things need manual valuations. Look up current market value (e.g. KBB for vehicles, Zillow for property) and click \"update\" on the row in /accounts.".into(),
+            body: "Owned things need manual valuations. Look up current market value (e.g. KBB for vehicles, Zillow for property) and add a snapshot in /data?tab=snapshots.".into(),
             category: None,
             amount_usd: None,
             direction: Some("snapshot".into()),

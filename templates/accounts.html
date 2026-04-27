@@ -32,10 +32,9 @@
     </tbody>
 </table>
 
-<div class="section-eyebrow" style="margin-top: 2.5rem;">Owned ({{ owned_assets.len() }})</div>
-<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Things of value held outside investment accounts — car, apartment, watches, art. Counted in net worth, excluded from drift and allocation math. Click <em>update</em> on a row to set today's value, or <em>+ add owned thing</em> below to track something new.</p>
-
 {% if !owned_assets.is_empty() %}
+<div class="section-eyebrow" style="margin-top: 2.5rem;">Owned ({{ owned_assets.len() }})</div>
+<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Things of value held outside investment accounts — car, apartment, watches, art. Counted in net worth, excluded from drift and allocation math. Add new owned things in <a href="/data?tab=assets" style="color: var(--text); text-decoration: underline;">/data?tab=assets</a> (type <code>owned</code>) and update their values in <a href="/data?tab=snapshots" style="color: var(--text); text-decoration: underline;">/data?tab=snapshots</a>.</p>
 <table>
     <thead>
         <tr>
@@ -44,7 +43,6 @@
             <th>Container</th>
             <th class="r">Latest value</th>
             <th>As of</th>
-            <th></th>
         </tr>
     </thead>
     <tbody>
@@ -55,43 +53,9 @@
             <td class="label">{% match o.account_id %}{% when Some with (id) %}<a href="/accounts/{{ id }}" style="color: var(--text-secondary); text-decoration: underline;">{{ o.account_name.as_deref().unwrap_or("\u{2014}") }}</a>{% when None %}<span class="muted">—</span>{% endmatch %}</td>
             <td class="r" style="font-variant-numeric: tabular-nums;">{% match o.latest_value_usd %}{% when Some with (v) %}${{ "{:.0}"|format(v) }}{% when None %}<span class="muted">—</span>{% endmatch %}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ o.latest_as_of.as_deref().unwrap_or("never") }}</td>
-            <td>
-                <details style="display: inline-block;">
-                    <summary style="cursor: pointer; font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline; list-style: none;">update</summary>
-                    <form method="POST" action="/owned/snapshot" style="display: inline-flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
-                        <input type="hidden" name="asset_id" value="{{ o.asset_id }}">
-                        <input type="number" name="value_usd" step="0.01" required placeholder="value" style="width: 110px;">
-                        <input type="date" name="as_of" value="{{ today }}" style="width: 140px;">
-                        <button type="submit" class="primary" style="font-size: 0.75rem;">save</button>
-                    </form>
-                </details>
-            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-{% endif %}
-
-{% if !owned_account_options.is_empty() %}
-<details style="margin-top: 1rem;">
-    <summary class="add-link">+ add owned thing</summary>
-    <form method="POST" action="/owned/asset/new" style="margin: 1rem 0 2rem; padding: 1rem 0; border-top: 1px solid var(--border);">
-        <div class="form-row">
-            <div class="form-field"><label>Name <span class="neg" title="required">*</span></label><input name="name" required placeholder="Apartment" style="width: 160px;"></div>
-            <div class="form-field"><label>Symbol</label><input name="symbol" placeholder="auto from name" style="width: 120px; font-family: 'IBM Plex Mono', monospace;"></div>
-            <div class="form-field"><label>Container <span class="neg" title="required">*</span></label>
-                <select name="account_id" required style="width: 180px;">
-                    {% for opt in owned_account_options %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-field"><label>Value USD <span class="neg" title="required">*</span></label><input name="value_usd" type="number" step="0.01" required style="width: 130px;"></div>
-            <div class="form-field"><label>As of</label><input name="as_of" type="date" value="{{ today }}" style="width: 140px;"></div>
-        </div>
-        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Symbol auto-derives from the name (uppercased, alphanumerics only) when blank — <em>"Beach House"</em> becomes <code>BEACHHOUSE</code>. Re-using an existing symbol attaches a new snapshot to the same row.</p>
-        <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
-    </form>
-</details>
-{% else %}
-<p class="secondary" style="font-size: 0.75rem; margin-top: 1rem;">No owned-type container account exists. Create one in <a href="/data?tab=accounts" style="color: var(--text); text-decoration: underline;">/data</a> with <em>investment account</em> unchecked, then come back here to add things.</p>
 {% endif %}
 {% endblock %}

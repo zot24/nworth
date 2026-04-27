@@ -30,6 +30,7 @@
     <a href="/data?tab=assets&asset_type=fiat" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">fiat</a>
     <a href="/data?tab=assets&asset_type=stable" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">stable</a>
     <a href="/data?tab=assets&asset_type=nft" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">nft</a>
+    <a href="/data?tab=assets&asset_type=owned" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">owned</a>
 </div>
 
 <details>
@@ -42,6 +43,7 @@
                 <select name="type_code" required style="width: 100px;">
                     <option value="crypto">crypto</option><option value="stock">stock</option>
                     <option value="fiat">fiat</option><option value="stable">stable</option><option value="nft">nft</option>
+                    <option value="owned">owned</option>
                 </select>
             </div>
             <div class="form-field"><label>Chain</label><input name="chain_code" style="width: 100px;"></div>
@@ -97,6 +99,7 @@
                     <option value="fiat"{% if a.type_code == "fiat" %} selected{% endif %}>fiat</option>
                     <option value="stable"{% if a.type_code == "stable" %} selected{% endif %}>stable</option>
                     <option value="nft"{% if a.type_code == "nft" %} selected{% endif %}>nft</option>
+                    <option value="owned"{% if a.type_code == "owned" %} selected{% endif %}>owned</option>
                 </select>
             </td>
             <td><input name="chain_code" value="{{ a.chain_code }}" class="edit-input" style="width: 80px;"></td>

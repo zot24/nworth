@@ -19,22 +19,12 @@ pub struct OwnedAssetRow {
     pub latest_as_of: Option<String>,
 }
 
-/// Lightweight container-account option for the "+ add owned asset" form. The
-/// dropdown almost always has one entry ("Physical Holdings"); having a list
-/// keeps the door open for users who want to split real-estate from objects.
-pub struct OwnedAccountOption {
-    pub id: i64,
-    pub name: String,
-}
-
 #[derive(Template)]
 #[template(path = "accounts.html")]
 struct AccountsTemplate {
     investments: Vec<Account>,
     owned_assets: Vec<OwnedAssetRow>,
-    owned_account_options: Vec<OwnedAccountOption>,
     total_account_count: usize,
-    today: String,
 }
 
 pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
@@ -48,11 +38,8 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     .await?;
 
     let total_account_count = accounts.len();
-    let (investments, owned_accts): (Vec<Account>, Vec<Account>) = accounts.into_iter()
-        .partition(|a| a.is_investment == 1);
-
-    let owned_account_options: Vec<OwnedAccountOption> = owned_accts.iter()
-        .map(|a| OwnedAccountOption { id: a.id, name: a.name.clone() })
+    let investments: Vec<Account> = accounts.into_iter()
+        .filter(|a| a.is_investment == 1)
         .collect();
 
     // Owned assets joined to the account on their latest snapshot. A LEFT JOIN
@@ -86,14 +73,7 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
         })
         .collect();
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    Ok(AccountsTemplate {
-        investments,
-        owned_assets,
-        owned_account_options,
-        total_account_count,
-        today,
-    })
+    Ok(AccountsTemplate { investments, owned_assets, total_account_count })
 }
 
 #[derive(Debug)]
