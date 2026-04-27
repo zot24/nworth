@@ -376,35 +376,36 @@ async fn compute_actions(pool: &SqlitePool) -> Result<ActionsReport, AppError> {
         }
     }
 
-    // Owned-asset stale-snapshot nudges (Car, future house, etc.)
-    // Surface a low-priority "refresh value" action when the most recent snapshot for
-    // an owned account is older than STALE_OWNED_DAYS (or when none exists).
-    let owned_status: Vec<(i64, String, Option<String>)> = sqlx::query_as(
-        "SELECT ac.id, ac.name, MAX(s.as_of)
-         FROM accounts ac
-         LEFT JOIN snapshots s ON s.account_id = ac.id
-         WHERE ac.is_investment = 0 AND ac.active = 1
-         GROUP BY ac.id, ac.name",
+    // Owned-asset stale-snapshot nudges (Car, Apartment, Watch, …).
+    // Now per-asset, since the data model treats each owned thing as its own
+    // asset row inside a shared container account. A stale Car valuation and
+    // a fresh Apartment valuation should produce one card, not zero.
+    let owned_status: Vec<(i64, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT a.id, a.symbol, a.name, MAX(s.as_of)
+         FROM assets a
+         LEFT JOIN snapshots s ON s.asset_id = a.id
+         WHERE a.type_code = 'owned' AND a.active = 1
+         GROUP BY a.id, a.symbol, a.name",
     ).fetch_all(pool).await?;
     let now_d = chrono::NaiveDate::parse_from_str(&now, "%Y-%m-%d").ok();
-    for (account_id, name, last_snap) in owned_status {
+    for (asset_id, symbol, name, last_snap) in owned_status {
         let days = match (&last_snap, now_d) {
             (Some(s), Some(n)) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
                 .ok().map(|d| (n - d).num_days()).unwrap_or(i64::MAX),
-            _ => i64::MAX, // never snapshotted
+            _ => i64::MAX,
         };
         if days < STALE_OWNED_DAYS { continue; }
-        // Urgency: 50 at 90d, 80 at 180d, 100 at 365d+ or never-snapshotted
         let urgency = if days == i64::MAX { 100.0 }
                       else { ((days as f64 / 365.0).min(1.0) * 50.0 + 50.0).min(100.0) };
         let label = if days == i64::MAX { "never set".to_string() } else { format!("{days} days ago") };
+        let display_name = name.unwrap_or_else(|| symbol.clone());
         out.push(ActionCard {
-            id: format!("stale_owned:{account_id}"),
+            id: format!("stale_owned:{asset_id}"),
             kind: "refresh_value".into(),
             priority: tier(urgency).into(),
             urgency,
-            headline: format!("Update {name} value — last set {label}"),
-            body: "Owned assets need manual snapshots. Look up current market value (e.g. KBB for vehicles, Zillow for property) and add a snapshot in /data?tab=snapshots.".into(),
+            headline: format!("Update {display_name} value — last set {label}"),
+            body: "Owned things need manual valuations. Look up current market value (e.g. KBB for vehicles, Zillow for property) and click \"update\" on the row in /accounts.".into(),
             category: None,
             amount_usd: None,
             direction: Some("snapshot".into()),

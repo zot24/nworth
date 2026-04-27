@@ -10,7 +10,7 @@
         {{ account.name }} <span style="color: var(--text-muted); font-weight: 400;">({{ account.type_code }}{% if account.is_investment == 0 %} · owned{% endif %})</span>{% if let Some(inst) = account.institution.as_deref() %} <span style="font-family: 'Source Sans 3', sans-serif; font-size: 0.875rem; color: var(--text-secondary);">{{ inst }}</span>{% endif %}
     </h1>
     {% if account.is_investment == 0 %}
-    <a href="/accounts" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">update value in /accounts →</a>
+    <a href="/accounts" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">update values in /accounts →</a>
     {% else %}
     <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
     {% endif %}
@@ -25,56 +25,9 @@
 
 <hr>
 
-{% if account.is_investment == 0 %}
-<!-- Owned accounts: a single value-over-time line is the only meaningful view —
-     there's no holdings breakdown to make and the "asset" is a synthetic bridge row. -->
-<div class="chart-box">
-    <h3>Value Over Time</h3>
-    <canvas id="account-chart" height="120"></canvas>
-</div>
-
-<hr>
-
-<table>
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th class="r">Value</th>
-        </tr>
-    </thead>
-    <tbody id="value-history-rows">
-        <!-- populated client-side from /api/accounts/:id/history so we don't have to
-             reshape the snapshot list server-side just for this view. -->
-    </tbody>
-</table>
-
-<script>
-(async () => {
-    const resp = await fetch('/api/accounts/{{ account.id }}/history');
-    const data = await resp.json();
-    const dates = [...new Set(data.map(d => d.as_of))].sort();
-    const valueByDate = {};
-    data.forEach(d => { valueByDate[d.as_of] = (valueByDate[d.as_of] || 0) + d.value_usd; });
-    const values = dates.map(d => valueByDate[d]);
-
-    new Chart(document.getElementById('account-chart'), {
-        type: 'line',
-        data: { labels: dates, datasets: [areaDataset('{{ account.name }}', values, 4)] },
-        options: { responsive: true, scales: darkScale(), plugins: { legend: { display: false } } },
-    });
-
-    const tbody = document.getElementById('value-history-rows');
-    [...dates].reverse().forEach(d => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${d}</td><td class="r">$${valueByDate[d].toLocaleString(undefined, {maximumFractionDigits: 0})}</td>`;
-        tbody.appendChild(tr);
-    });
-})();
-</script>
-{% else %}
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
     <div class="chart-box">
-        <h3>Balance Over Time</h3>
+        <h3>{% if account.is_investment == 0 %}Value Over Time{% else %}Balance Over Time{% endif %}</h3>
         <canvas id="account-chart" height="150"></canvas>
     </div>
     <div class="chart-box">
@@ -88,7 +41,7 @@
 <table>
     <thead>
         <tr>
-            <th>Symbol</th>
+            <th>{% if account.is_investment == 0 %}Thing{% else %}Symbol{% endif %}</th>
             <th class="r">Quantity</th>
             <th class="r">Value</th>
             <th class="r">% of Account</th>
@@ -133,5 +86,4 @@
     new Chart(document.getElementById('holdings-chart'), doughnutConfig(labels, values));
 })();
 </script>
-{% endif %}
 {% endblock %}

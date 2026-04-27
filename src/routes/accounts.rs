@@ -4,20 +4,36 @@ use axum::extract::{Path, State};
 
 use crate::{error::AppError, models::account::Account, AppState};
 
-/// Owned-account row enriched with the latest manual valuation, so the template
-/// can render "Update value" inline with the current number alongside.
-pub struct OwnedRow {
-    pub account: Account,
+/// One row per owned-type asset (Car, Apartment, Watch, …) — the "thing" itself,
+/// joined to whichever owned-account container it lives in via its most recent
+/// snapshot. This is what the Owned section of /accounts lists post-refactor:
+/// the assets are the conceptual unit ("a car is a thing of value"), and the
+/// container account is just the bucket they're grouped under.
+pub struct OwnedAssetRow {
+    pub asset_id: i64,
+    pub asset_symbol: String,
+    pub asset_name: String,
+    pub account_id: Option<i64>,
+    pub account_name: Option<String>,
     pub latest_value_usd: Option<f64>,
     pub latest_as_of: Option<String>,
+}
+
+/// Lightweight container-account option for the "+ add owned asset" form. The
+/// dropdown almost always has one entry ("Physical Holdings"); having a list
+/// keeps the door open for users who want to split real-estate from objects.
+pub struct OwnedAccountOption {
+    pub id: i64,
+    pub name: String,
 }
 
 #[derive(Template)]
 #[template(path = "accounts.html")]
 struct AccountsTemplate {
     investments: Vec<Account>,
-    owned: Vec<OwnedRow>,
-    total_count: usize,
+    owned_assets: Vec<OwnedAssetRow>,
+    owned_account_options: Vec<OwnedAccountOption>,
+    total_account_count: usize,
     today: String,
 }
 
@@ -31,32 +47,53 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     .fetch_all(&state.pool)
     .await?;
 
-    let total_count = accounts.len();
+    let total_account_count = accounts.len();
     let (investments, owned_accts): (Vec<Account>, Vec<Account>) = accounts.into_iter()
         .partition(|a| a.is_investment == 1);
 
-    // Latest snapshot value per owned account (one query, joined client-side).
-    let mut owned: Vec<OwnedRow> = Vec::with_capacity(owned_accts.len());
-    for account in owned_accts {
-        let latest: Option<(String, f64)> = sqlx::query_as(
-            "SELECT s.as_of, s.value_usd
-             FROM snapshots s
-             WHERE s.account_id = ?1
-             ORDER BY s.as_of DESC
-             LIMIT 1",
-        )
-        .bind(account.id)
-        .fetch_optional(&state.pool)
-        .await?;
-        let (latest_as_of, latest_value_usd) = match latest {
-            Some((d, v)) => (Some(d), Some(v)),
-            None => (None, None),
-        };
-        owned.push(OwnedRow { account, latest_value_usd, latest_as_of });
-    }
+    let owned_account_options: Vec<OwnedAccountOption> = owned_accts.iter()
+        .map(|a| OwnedAccountOption { id: a.id, name: a.name.clone() })
+        .collect();
+
+    // Owned assets joined to the account on their latest snapshot. A LEFT JOIN
+    // keeps newly-added assets without snapshots visible (account_name = None).
+    let owned_asset_rows: Vec<(i64, String, Option<String>, Option<i64>, Option<String>, Option<f64>, Option<String>)> = sqlx::query_as(
+        "SELECT a.id, a.symbol, a.name,
+                latest.account_id, ac.name,
+                latest.value_usd, latest.as_of
+         FROM assets a
+         LEFT JOIN (
+             SELECT s.asset_id,
+                    s.account_id,
+                    s.value_usd,
+                    s.as_of,
+                    ROW_NUMBER() OVER (PARTITION BY s.asset_id ORDER BY s.as_of DESC) AS rn
+               FROM snapshots s
+         ) latest ON latest.asset_id = a.id AND latest.rn = 1
+         LEFT JOIN accounts ac ON ac.id = latest.account_id
+         WHERE a.type_code = 'owned' AND a.active = 1
+         ORDER BY a.symbol",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let owned_assets: Vec<OwnedAssetRow> = owned_asset_rows.into_iter()
+        .map(|(asset_id, asset_symbol, asset_name, account_id, account_name, latest_value_usd, latest_as_of)| OwnedAssetRow {
+            asset_id, asset_symbol,
+            asset_name: asset_name.unwrap_or_default(),
+            account_id, account_name,
+            latest_value_usd, latest_as_of,
+        })
+        .collect();
 
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    Ok(AccountsTemplate { investments, owned, total_count, today })
+    Ok(AccountsTemplate {
+        investments,
+        owned_assets,
+        owned_account_options,
+        total_account_count,
+        today,
+    })
 }
 
 #[derive(Debug)]
