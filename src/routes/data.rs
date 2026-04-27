@@ -145,10 +145,15 @@ pub async fn index(
     let tab = q.tab.unwrap_or_else(|| "assets".to_string());
     let selected_asset_type = q.asset_type.unwrap_or_default();
 
-    // Assets — all, including inactive
+    // Assets — all tradable, including inactive. The 'owned' type is excluded because
+    // those rows are an implementation detail of the per-account "update value" flow
+    // (one auto-provisioned asset per owned account) and the inline-edit dropdown here
+    // doesn't include 'owned' as an option, so editing one would silently flip its type.
     let asset_rows: Vec<(i64, String, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<f64>, i64, i64)> = sqlx::query_as(
         "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, target_pct, is_stable, active
-         FROM assets ORDER BY active DESC, type_code, symbol",
+         FROM assets
+         WHERE type_code != 'owned'
+         ORDER BY active DESC, type_code, symbol",
     )
     .fetch_all(&state.pool)
     .await?;
