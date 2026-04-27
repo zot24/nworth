@@ -451,7 +451,7 @@ fn humanize_cat(c: &str) -> String {
         "stocks" => "Stocks".into(),
         "crypto" => "Crypto".into(),
         "cash" => "Cash".into(),
-        "car" => "Car".into(),
+        "owned" => "Owned".into(),
         other => other.to_string(),
     }
 }
@@ -574,8 +574,8 @@ pub async fn wealth(State(s): State<AppState>) -> Result<Json<WealthReport>, App
         return Ok(Json(WealthReport { as_of: "".into(), total_value: 0.0, holdings: vec![] }));
     }
     // Per (asset, account) snapshot rows
-    let rows: Vec<(i64, String, Option<String>, String, String, f64, Option<f64>, f64)> = sqlx::query_as(
-        "SELECT a.id, a.symbol, a.name, a.type_code, ac.name, s.quantity * 1.0, s.price_usd, s.value_usd * 1.0
+    let rows: Vec<(i64, String, Option<String>, String, String, i64, f64, Option<f64>, f64)> = sqlx::query_as(
+        "SELECT a.id, a.symbol, a.name, a.type_code, ac.name, ac.is_investment, s.quantity * 1.0, s.price_usd, s.value_usd * 1.0
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
@@ -584,7 +584,7 @@ pub async fn wealth(State(s): State<AppState>) -> Result<Json<WealthReport>, App
          ORDER BY s.value_usd DESC",
     ).bind(&latest).fetch_all(&s.pool).await?;
 
-    let total: f64 = rows.iter().map(|(_, _, _, _, _, _, _, v)| *v).sum();
+    let total: f64 = rows.iter().map(|(_, _, _, _, _, _, _, _, v)| *v).sum();
 
     // Drift per category for the active mode (single computation reused per row)
     let drift_report = compute_drift(&s.pool).await?;
@@ -592,8 +592,10 @@ pub async fn wealth(State(s): State<AppState>) -> Result<Json<WealthReport>, App
         .map(|c| (c.category.clone(), c.drift_pp)).collect();
 
     let mut holdings: Vec<Holding> = Vec::with_capacity(rows.len());
-    for (asset_id, symbol, name, type_code, acct_name, qty, price, value) in rows {
-        let category = if acct_name == "Car" { "car".to_string() } else {
+    for (asset_id, symbol, name, type_code, acct_name, is_investment, qty, price, value) in rows {
+        // Owned-asset rows (is_investment=0) collapse to a single "owned" category — they
+        // don't have a drift target, so drift_pp falls through to 0.0 below.
+        let category = if is_investment == 0 { "owned".to_string() } else {
             match type_code.as_str() {
                 "stock" => "stocks".into(),
                 "stable" => "stable_yielding".into(),

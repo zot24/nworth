@@ -33,6 +33,7 @@ pub struct AllocationSlice {
     pub symbol: String,
     pub type_code: String,
     pub value_usd: f64,
+    pub is_investment: i64,
 }
 
 // ---------- Dashboard APIs ----------
@@ -90,13 +91,17 @@ pub async fn allocation(
         return Ok(Json(vec![]));
     }
 
-    let rows: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT a.symbol, a.type_code, SUM(s.value_usd)
-         FROM snapshots s JOIN assets a ON a.id = s.asset_id
+    // Group also by is_investment so the client can split owned-asset rows into a
+    // separate "Owned" category (a single symbol could in theory appear under both).
+    let rows: Vec<(String, String, i64, f64)> = sqlx::query_as(
+        "SELECT a.symbol, a.type_code, ac.is_investment, SUM(s.value_usd)
+         FROM snapshots s
+         JOIN assets a   ON a.id = s.asset_id
+         JOIN accounts ac ON ac.id = s.account_id
          WHERE s.as_of = ?1
-         GROUP BY a.symbol, a.type_code
+         GROUP BY a.symbol, a.type_code, ac.is_investment
          HAVING SUM(s.value_usd) > 0
-         ORDER BY 3 DESC",
+         ORDER BY 4 DESC",
     )
     .bind(&latest)
     .fetch_all(&state.pool)
@@ -104,10 +109,11 @@ pub async fn allocation(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(symbol, type_code, value_usd)| AllocationSlice {
+            .map(|(symbol, type_code, is_investment, value_usd)| AllocationSlice {
                 symbol,
                 type_code,
                 value_usd,
+                is_investment,
             })
             .collect(),
     ))
@@ -431,27 +437,26 @@ pub struct CategoryPoint {
 
 /// GET /api/networth/by-category
 /// Maps type_code to display categories: stock→Stocks, stable→Stable Yielding, crypto/nft→Crypto, fiat→Cash.
-/// Separates Car account into its own category.
+/// Owned-asset accounts (is_investment=0) collapse into their own "Owned" series.
 pub async fn networth_by_category(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CategoryPoint>>, AppError> {
-    let rows: Vec<(String, String, String, f64)> = sqlx::query_as(
-        "SELECT s.as_of, a.type_code, ac.name, SUM(s.value_usd)
+    let rows: Vec<(String, String, i64, f64)> = sqlx::query_as(
+        "SELECT s.as_of, a.type_code, ac.is_investment, SUM(s.value_usd)
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         GROUP BY s.as_of, a.type_code, ac.name
+         GROUP BY s.as_of, a.type_code, ac.is_investment
          ORDER BY s.as_of",
     )
     .fetch_all(&state.pool)
     .await?;
 
-    // Map (as_of, type_code, account_name) → category
     let mut cat_map: std::collections::BTreeMap<(String, String), f64> =
         std::collections::BTreeMap::new();
-    for (as_of, type_code, acct_name, val) in rows {
-        let category = if acct_name == "Car" {
-            "Car".to_string()
+    for (as_of, type_code, is_investment, val) in rows {
+        let category = if is_investment == 0 {
+            "Owned".to_string()
         } else {
             match type_code.as_str() {
                 "stock" => "Stocks".to_string(),
@@ -759,31 +764,28 @@ pub async fn allocation_adjustments(
         return Ok(Json(vec![]));
     }
 
-    // Current value by category
-    let rows: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT a.type_code, ac.name, SUM(s.value_usd) * 1.0
+    // Current value by category — investment accounts only. Owned assets (is_investment=0)
+    // aren't tradable, so they don't have allocation targets and shouldn't skew the denominator.
+    let rows: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT a.type_code, SUM(s.value_usd) * 1.0
          FROM snapshots s
-         JOIN assets a ON a.id = s.asset_id
+         JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE s.as_of = ?1
-         GROUP BY a.type_code, ac.name",
+         WHERE s.as_of = ?1 AND ac.is_investment = 1
+         GROUP BY a.type_code",
     )
     .bind(&latest)
     .fetch_all(&state.pool)
     .await?;
 
     let mut cat_values: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-    for (type_code, acct_name, val) in &rows {
-        let category = if acct_name == "Car" {
-            "car".to_string()
-        } else {
-            match type_code.as_str() {
-                "stock" => "stocks".to_string(),
-                "stable" => "stable_yielding".to_string(),
-                "crypto" | "nft" => "crypto".to_string(),
-                "fiat" => "cash".to_string(),
-                other => other.to_string(),
-            }
+    for (type_code, val) in &rows {
+        let category = match type_code.as_str() {
+            "stock" => "stocks".to_string(),
+            "stable" => "stable_yielding".to_string(),
+            "crypto" | "nft" => "crypto".to_string(),
+            "fiat" => "cash".to_string(),
+            other => other.to_string(),
         };
         *cat_values.entry(category).or_default() += val;
     }
@@ -960,11 +962,11 @@ pub async fn market_sentiment(
         ("crypto", "BTC", "crypto"),
     ];
 
-    // Portfolio momentum from snapshots
+    // Portfolio momentum from snapshots. Owned assets (is_investment=0) have no market
+    // sentiment — exclude them so they don't pollute the per-category MA signal.
     let snap_rows: Vec<(String, String, f64)> = sqlx::query_as(
         "SELECT
             CASE
-                WHEN ac.name = 'Car' THEN 'car'
                 WHEN a.type_code = 'stock' THEN 'stocks'
                 WHEN a.type_code = 'stable' THEN 'stable_yielding'
                 WHEN a.type_code IN ('crypto','nft') THEN 'crypto'
@@ -976,6 +978,7 @@ pub async fn market_sentiment(
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
+         WHERE ac.is_investment = 1
          GROUP BY category, s.as_of
          ORDER BY category, s.as_of",
     )
@@ -1052,7 +1055,7 @@ pub async fn market_sentiment(
 
     // Combine portfolio momentum + market signals
     let mut results = Vec::new();
-    let categories = ["stocks", "crypto", "stable_yielding", "cash", "car"];
+    let categories = ["stocks", "crypto", "stable_yielding", "cash"];
 
     for cat in categories {
         let points = by_cat.get(cat);

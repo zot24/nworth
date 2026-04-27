@@ -91,7 +91,7 @@ const CAT_COLORS = {
     'Stable Yielding': '#d97706',
     'Crypto': '#7c3aed',
     'Cash': '#059669',
-    'Car': '#dc2626',
+    'Owned': '#dc2626',
 };
 
 function fmtMoney(n) {
@@ -193,10 +193,10 @@ function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
     const alloc = await (await fetch('/api/allocation')).json();
     const catTotals = {};
     alloc.forEach(a => {
-        const cat = a.type_code === 'stock' ? 'Stocks'
+        const cat = a.is_investment === 0 ? 'Owned'
+            : a.type_code === 'stock' ? 'Stocks'
             : a.type_code === 'stable' ? 'Stable Yielding'
             : (a.type_code === 'crypto' || a.type_code === 'nft') ? 'Crypto'
-            : a.type_code === 'fiat' && a.symbol === 'CAR' ? 'Car'
             : 'Cash';
         catTotals[cat] = (catTotals[cat] || 0) + a.value_usd;
     });
