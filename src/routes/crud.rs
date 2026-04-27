@@ -107,6 +107,79 @@ pub(crate) async fn smart_delete_account(pool: &sqlx::SqlitePool, id: i64) -> Re
     }
 }
 
+// ────────── Owned-account quick value snapshot ──────────
+
+#[derive(Deserialize)]
+pub struct OwnedValueForm {
+    /// Defaults to today when blank.
+    as_of: Option<String>,
+    value_usd: f64,
+}
+
+/// POST /accounts/:id/value
+///
+/// Streamlined "update value" flow for owned (is_investment=0) accounts. The user only
+/// needs to enter a current valuation — we auto-provision a single asset row of type
+/// 'owned' for the account (symbol = uppercased account name) and upsert a snapshot
+/// against it with quantity=1, price=value. The snapshots schema requires a non-null
+/// asset_id, so this asset is the bridge that lets owned things participate in net-worth
+/// math without an Investment-style position/price stream.
+///
+/// Idempotent: re-submitting for the same date overwrites the existing snapshot.
+pub async fn update_owned_value(
+    State(state): State<AppState>,
+    Path(account_id): Path<i64>,
+    Form(f): Form<OwnedValueForm>,
+) -> Result<Redirect, AppError> {
+    let as_of = f.as_of.filter(|s| !s.is_empty())
+        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+
+    // Confirm the account is owned, and grab its name to derive the asset symbol.
+    let (name, is_investment): (String, i64) = sqlx::query_as(
+        "SELECT name, is_investment FROM accounts WHERE id = ?1",
+    ).bind(account_id).fetch_one(&state.pool).await?;
+    if is_investment == 1 {
+        return Err(AppError::BadRequest(
+            "update_owned_value is only valid for owned accounts (is_investment=0)".into(),
+        ));
+    }
+
+    // Symbol = account name uppercased + non-alphanumerics dropped (e.g. "Future House" → "FUTUREHOUSE").
+    // Collisions with existing symbols of type 'owned' are fine — they'll be reused.
+    let symbol: String = name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase();
+    let symbol = if symbol.is_empty() { format!("OWNED{account_id}") } else { symbol };
+
+    // Find-or-create the bridging asset. UNIQUE(symbol, type_code) makes this safe.
+    let asset_id: i64 = match sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM assets WHERE symbol = ?1 AND type_code = 'owned'",
+    ).bind(&symbol).fetch_optional(&state.pool).await? {
+        Some(id) => id,
+        None => sqlx::query_scalar(
+            "INSERT INTO assets(symbol, name, type_code, is_stable, active)
+             VALUES(?1, ?2, 'owned', 0, 1) RETURNING id",
+        ).bind(&symbol).bind(&name).fetch_one(&state.pool).await?,
+    };
+
+    sqlx::query(
+        "INSERT INTO snapshots(as_of, account_id, asset_id, quantity, price_usd, value_usd, source)
+         VALUES(?1, ?2, ?3, 1, ?4, ?4, 'manual')
+         ON CONFLICT(as_of, account_id, asset_id) DO UPDATE SET
+           price_usd = excluded.price_usd,
+           value_usd = excluded.value_usd",
+    )
+    .bind(&as_of)
+    .bind(account_id)
+    .bind(asset_id)
+    .bind(f.value_usd)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Redirect::to("/accounts"))
+}
+
 // ────────── Assets ──────────
 
 #[derive(Deserialize)]

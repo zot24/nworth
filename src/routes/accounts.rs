@@ -4,12 +4,21 @@ use axum::extract::{Path, State};
 
 use crate::{error::AppError, models::account::Account, AppState};
 
+/// Owned-account row enriched with the latest manual valuation, so the template
+/// can render "Update value" inline with the current number alongside.
+pub struct OwnedRow {
+    pub account: Account,
+    pub latest_value_usd: Option<f64>,
+    pub latest_as_of: Option<String>,
+}
+
 #[derive(Template)]
 #[template(path = "accounts.html")]
 struct AccountsTemplate {
     investments: Vec<Account>,
-    owned: Vec<Account>,
+    owned: Vec<OwnedRow>,
     total_count: usize,
+    today: String,
 }
 
 pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
@@ -23,10 +32,31 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     .await?;
 
     let total_count = accounts.len();
-    let (investments, owned): (Vec<Account>, Vec<Account>) = accounts.into_iter()
+    let (investments, owned_accts): (Vec<Account>, Vec<Account>) = accounts.into_iter()
         .partition(|a| a.is_investment == 1);
 
-    Ok(AccountsTemplate { investments, owned, total_count })
+    // Latest snapshot value per owned account (one query, joined client-side).
+    let mut owned: Vec<OwnedRow> = Vec::with_capacity(owned_accts.len());
+    for account in owned_accts {
+        let latest: Option<(String, f64)> = sqlx::query_as(
+            "SELECT s.as_of, s.value_usd
+             FROM snapshots s
+             WHERE s.account_id = ?1
+             ORDER BY s.as_of DESC
+             LIMIT 1",
+        )
+        .bind(account.id)
+        .fetch_optional(&state.pool)
+        .await?;
+        let (latest_as_of, latest_value_usd) = match latest {
+            Some((d, v)) => (Some(d), Some(v)),
+            None => (None, None),
+        };
+        owned.push(OwnedRow { account, latest_value_usd, latest_as_of });
+    }
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    Ok(AccountsTemplate { investments, owned, total_count, today })
 }
 
 #[derive(Debug)]

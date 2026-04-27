@@ -34,23 +34,36 @@
 
 {% if !owned.is_empty() %}
 <div class="section-eyebrow" style="margin-top: 2.5rem;">Owned ({{ owned.len() }})</div>
-<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Counted in net worth, excluded from drift and allocation math. Manual snapshots — the Action Center will nudge you when these go stale.</p>
+<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Counted in net worth, excluded from drift and allocation math. Manual snapshots — click <em>update</em> on a row to set today's value (a synthetic <code>owned</code> asset is auto-provisioned per account, no asset row required).</p>
 <table>
     <thead>
         <tr>
             <th>Name</th>
             <th>Type</th>
             <th>Institution</th>
-            <th>Notes</th>
+            <th class="r">Latest value</th>
+            <th>As of</th>
+            <th></th>
         </tr>
     </thead>
     <tbody>
-        {% for a in owned %}
+        {% for o in owned %}
         <tr>
-            <td class="name"><a href="/accounts/{{ a.id }}" style="color: var(--text); text-decoration: underline;">{{ a.name }}</a></td>
-            <td class="label">{{ a.type_code }}</td>
-            <td class="label">{{ a.institution.as_deref().unwrap_or("\u{2014}") }}</td>
-            <td class="label">{{ a.notes.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="name"><a href="/accounts/{{ o.account.id }}" style="color: var(--text); text-decoration: underline;">{{ o.account.name }}</a></td>
+            <td class="label">{{ o.account.type_code }}</td>
+            <td class="label">{{ o.account.institution.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="r" style="font-variant-numeric: tabular-nums;">{% match o.latest_value_usd %}{% when Some with (v) %}${{ "{:.0}"|format(v) }}{% when None %}<span class="muted">—</span>{% endmatch %}</td>
+            <td class="label" style="font-size: 0.6875rem;">{{ o.latest_as_of.as_deref().unwrap_or("never") }}</td>
+            <td>
+                <details style="display: inline-block;">
+                    <summary style="cursor: pointer; font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline; list-style: none;">update</summary>
+                    <form method="POST" action="/accounts/{{ o.account.id }}/value" style="display: inline-flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+                        <input type="number" name="value_usd" step="0.01" required placeholder="value" style="width: 110px;">
+                        <input type="date" name="as_of" value="{{ today }}" style="width: 140px;">
+                        <button type="submit" class="primary" style="font-size: 0.75rem;">save</button>
+                    </form>
+                </details>
+            </td>
         </tr>
         {% endfor %}
     </tbody>

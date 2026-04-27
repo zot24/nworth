@@ -79,6 +79,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/accounts/new", post(routes::crud::create_account))
         .route("/accounts/:id/edit", post(routes::crud::update_account))
         .route("/accounts/:id/delete", post(routes::crud::delete_account))
+        .route("/accounts/:id/value", post(routes::crud::update_owned_value))
         .route("/assets/new", post(routes::crud::create_asset))
         .route("/assets/:id/edit", post(routes::crud::update_asset))
         .route("/assets/:id/delete", post(routes::crud::delete_asset))
