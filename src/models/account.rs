@@ -10,4 +10,5 @@ pub struct Account {
     pub chain_code: Option<String>,
     pub active: i64,
     pub notes: Option<String>,
+    pub is_investment: i64,
 }

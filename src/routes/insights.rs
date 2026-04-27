@@ -24,6 +24,7 @@ const MIN_TRADE_SIZE_FRAC: f64 = 0.005; // 0.5% of NW
 const MIN_TRADE_SIZE_USD: f64 = 500.0;  // floor
 const CONCENTRATION_TOP1_THRESHOLD: f64 = 0.25;
 const STALE_SNAPSHOT_DAYS: i64 = 14;
+const STALE_OWNED_DAYS: i64 = 90;       // owned-asset snapshots get a refresh nudge after this
 
 const URGENT_SCORE: f64 = 70.0;
 const SUGGESTED_SCORE: f64 = 35.0;
@@ -45,7 +46,8 @@ pub struct CategoryDrift {
 #[derive(Serialize)]
 pub struct DriftReport {
     pub total_value: f64,
-    pub tradable_value: f64,
+    pub tradable_value: f64,    // investment accounts only — drift denominator
+    pub owned_value: f64,       // is_investment=0 accounts (car, future house, etc.)
     pub active_mode: String,
     pub abs_drift_pp: f64,
     pub categories: Vec<CategoryDrift>,
@@ -60,21 +62,28 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
     let latest = latest_as_of(pool).await?;
     if latest.is_empty() {
         return Ok(DriftReport {
-            total_value: 0.0, tradable_value: 0.0,
+            total_value: 0.0, tradable_value: 0.0, owned_value: 0.0,
             active_mode: "crab".into(), abs_drift_pp: 0.0,
             categories: vec![],
         });
     }
 
+    // Investment-account values per category (drives drift math)
     let cat_values = category_values(pool, &latest).await?;
-    let total: f64 = cat_values.values().sum();
-    // Car is tracked but not tradable — exclude from drift denominator
-    let car_value = *cat_values.get("car").unwrap_or(&0.0);
-    let tradable = total - car_value;
+    let tradable: f64 = cat_values.values().sum();
+
+    // Owned-asset value (is_investment = 0) — counted in net worth but not in drift
+    let owned: f64 = sqlx::query_scalar::<_, f64>(
+        "SELECT COALESCE(SUM(s.value_usd) * 1.0, 0.0)
+         FROM snapshots s
+         JOIN accounts ac ON ac.id = s.account_id
+         WHERE s.as_of = ?1 AND ac.is_investment = 0",
+    ).bind(&latest).fetch_one(pool).await?;
+    let total = tradable + owned;
 
     let active_mode = overall_market_mode(pool).await?;
 
-    // Targets for the active market mode
+    // Targets for the active market mode (investment categories only)
     let targets: Vec<(String, f64)> = sqlx::query_as(
         "SELECT category, target_pct FROM allocation_targets WHERE market_mode = ?1",
     ).bind(&active_mode).fetch_all(pool).await?;
@@ -82,13 +91,9 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
     let mut categories: Vec<CategoryDrift> = targets.into_iter()
         .map(|(category, target_pct)| {
             let current_value = *cat_values.get(&category).unwrap_or(&0.0);
-            let is_car = category == "car";
-            // Car uses total denominator; tradables exclude car so percentages add up correctly within the tradable book
-            let denom = if is_car { total } else { tradable };
-            let current_pct = if denom > 0.0 { current_value / denom } else { 0.0 };
+            let current_pct = if tradable > 0.0 { current_value / tradable } else { 0.0 };
             let drift_pp = (current_pct - target_pct) * 100.0;
-            // To rebalance, target_value = target_pct * denom; adjustment = target_value - current_value (positive=buy)
-            let target_value = target_pct * denom;
+            let target_value = target_pct * tradable;
             let adjustment_usd = target_value - current_value;
             let drift_usd = -adjustment_usd; // signed positive = over target
             CategoryDrift {
@@ -99,19 +104,19 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
                 drift_pp,
                 drift_usd,
                 adjustment_usd,
-                tradable: !is_car,
+                tradable: true,
             }
         }).collect();
     categories.sort_by(|a, b| b.current_value.partial_cmp(&a.current_value).unwrap());
 
     let abs_drift_pp: f64 = categories.iter()
-        .filter(|c| c.tradable)
         .map(|c| c.drift_pp.abs())
         .sum::<f64>() / 2.0;
 
     Ok(DriftReport {
         total_value: total,
         tradable_value: tradable,
+        owned_value: owned,
         active_mode,
         abs_drift_pp,
         categories,
@@ -141,14 +146,15 @@ async fn compute_concentration(pool: &SqlitePool) -> Result<ConcentrationReport,
     if latest.is_empty() {
         return Ok(ConcentrationReport { total_value: 0.0, top1: None, top3_pct: 0.0, hhi: 0.0, n_effective: 0.0 });
     }
-    // Aggregate per asset symbol across accounts; exclude Car account and STOCKS_TOTAL synthetic
+    // Aggregate per asset symbol across investment accounts. Owned-asset accounts and
+    // the STOCKS_TOTAL synthetic are excluded — concentration only matters for tradable holdings.
     let rows: Vec<(String, f64)> = sqlx::query_as(
         "SELECT a.symbol, SUM(s.value_usd) * 1.0
          FROM snapshots s
          JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
          WHERE s.as_of = ?1
-           AND ac.name != 'Car'
+           AND ac.is_investment = 1
            AND a.symbol != 'STOCKS_TOTAL'
          GROUP BY a.symbol
          ORDER BY SUM(s.value_usd) DESC",
@@ -284,14 +290,22 @@ async fn compute_actions(pool: &SqlitePool) -> Result<ActionsReport, AppError> {
         match (l, n) { (Some(l), Some(n)) => (n - l).num_days(), _ => 0 }
     };
     let stale = stale_days > STALE_SNAPSHOT_DAYS;
+    let has_data = !latest.is_empty();
 
     let drift_report = compute_drift(pool).await?;
     let conc = compute_concentration(pool).await?;
 
     let mut out: Vec<ActionCard> = vec![];
 
-    // Stale snapshot is its own card (and short-circuits other action quality).
-    if stale {
+    if !has_data {
+        out.push(ActionCard {
+            id: "snapshot:none".into(), kind: "snapshot".into(),
+            priority: tier(URGENT_SCORE).into(), urgency: 100.0,
+            headline: "No snapshots yet".into(),
+            body: "Add your first snapshot in /data?tab=snapshots to start tracking. The Action Center fills in once data exists.".into(),
+            category: None, amount_usd: None, direction: Some("snapshot".into()),
+        });
+    } else if stale {
         out.push(ActionCard {
             id: "snapshot:stale".into(), kind: "snapshot".into(),
             priority: tier(URGENT_SCORE).into(), urgency: 100.0,
@@ -360,6 +374,41 @@ async fn compute_actions(pool: &SqlitePool) -> Result<ActionsReport, AppError> {
                 direction: Some("sell".into()),
             });
         }
+    }
+
+    // Owned-asset stale-snapshot nudges (Car, future house, etc.)
+    // Surface a low-priority "refresh value" action when the most recent snapshot for
+    // an owned account is older than STALE_OWNED_DAYS (or when none exists).
+    let owned_status: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+        "SELECT ac.id, ac.name, MAX(s.as_of)
+         FROM accounts ac
+         LEFT JOIN snapshots s ON s.account_id = ac.id
+         WHERE ac.is_investment = 0 AND ac.active = 1
+         GROUP BY ac.id, ac.name",
+    ).fetch_all(pool).await?;
+    let now_d = chrono::NaiveDate::parse_from_str(&now, "%Y-%m-%d").ok();
+    for (account_id, name, last_snap) in owned_status {
+        let days = match (&last_snap, now_d) {
+            (Some(s), Some(n)) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                .ok().map(|d| (n - d).num_days()).unwrap_or(i64::MAX),
+            _ => i64::MAX, // never snapshotted
+        };
+        if days < STALE_OWNED_DAYS { continue; }
+        // Urgency: 50 at 90d, 80 at 180d, 100 at 365d+ or never-snapshotted
+        let urgency = if days == i64::MAX { 100.0 }
+                      else { ((days as f64 / 365.0).min(1.0) * 50.0 + 50.0).min(100.0) };
+        let label = if days == i64::MAX { "never set".to_string() } else { format!("{days} days ago") };
+        out.push(ActionCard {
+            id: format!("stale_owned:{account_id}"),
+            kind: "refresh_value".into(),
+            priority: tier(urgency).into(),
+            urgency,
+            headline: format!("Update {name} value — last set {label}"),
+            body: "Owned assets need manual snapshots. Look up current market value (e.g. KBB for vehicles, Zillow for property) and add a snapshot in /data?tab=snapshots.".into(),
+            category: None,
+            amount_usd: None,
+            direction: Some("snapshot".into()),
+        });
     }
 
     // Sort highest urgency first
@@ -588,30 +637,30 @@ async fn latest_as_of(pool: &SqlitePool) -> Result<String, AppError> {
     Ok(latest)
 }
 
+/// Sum value_usd grouped by investment category. Owned accounts (is_investment=0) are
+/// excluded — they contribute to net worth but never to drift/allocation math.
 async fn category_values(pool: &SqlitePool, as_of: &str) -> Result<HashMap<String, f64>, AppError> {
-    let rows: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT a.type_code, ac.name, SUM(s.value_usd) * 1.0
+    let rows: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT a.type_code, SUM(s.value_usd) * 1.0
          FROM snapshots s
-         JOIN assets a ON a.id = s.asset_id
+         JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE s.as_of = ?1
-         GROUP BY a.type_code, ac.name",
+         WHERE s.as_of = ?1 AND ac.is_investment = 1
+         GROUP BY a.type_code",
     ).bind(as_of).fetch_all(pool).await?;
     let mut out: HashMap<String, f64> = HashMap::new();
-    for (type_code, acct_name, val) in rows {
-        let category = if acct_name == "Car" { "car".to_string() } else {
-            match type_code.as_str() {
-                "stock" => "stocks".to_string(),
-                "stable" => "stable_yielding".to_string(),
-                "crypto" | "nft" => "crypto".to_string(),
-                "fiat" => "cash".to_string(),
-                other => other.to_string(),
-            }
+    for (type_code, val) in rows {
+        let category = match type_code.as_str() {
+            "stock" => "stocks".to_string(),
+            "stable" => "stable_yielding".to_string(),
+            "crypto" | "nft" => "crypto".to_string(),
+            "fiat" => "cash".to_string(),
+            other => other.to_string(),
         };
         *out.entry(category).or_default() += val;
     }
-    // Make sure all 5 keys exist (zero-fill) so callers don't have to handle Option
-    for cat in ["stocks", "stable_yielding", "crypto", "cash", "car"] {
+    // Zero-fill the four investment categories so callers don't have to handle Option
+    for cat in ["stocks", "stable_yielding", "crypto", "cash"] {
         out.entry(cat.into()).or_insert(0.0);
     }
     Ok(out)

@@ -66,12 +66,13 @@
         <tr>
             <th>ID</th><th>Symbol</th><th>Name</th><th>Type</th><th>Chain</th>
             <th>Risk</th><th>CoinGecko</th><th>Yahoo</th><th class="r">Target %</th>
-            <th>Stable</th><th>Active</th><th></th>
+            <th>Stable</th><th>Active</th>
+            <th style="width: 40px;"><button class="lock-toggle" onclick="toggleLock()" title="Edit"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></button></th>
         </tr>
     </thead>
     <tbody>
         {% for a in assets %}
-        <tr style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
+        <tr class="view-row" style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
             <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
             <td class="name" style="font-family: 'IBM Plex Mono', monospace;">{{ a.symbol }}</td>
             <td class="label">{{ a.name }}</td>
@@ -83,8 +84,42 @@
             <td class="r">{% if a.target_pct > 0.0 %}{{ "{:.0}"|format(a.target_pct * 100.0) }}%{% endif %}</td>
             <td class="label">{% if a.is_stable == 1 %}yes{% endif %}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
-            <td class="actions">
-                <a class="del" onclick="if(confirm('Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/assets/{{ a.id }}/delete?redirect=/data?tab=assets';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+            <td></td>
+        </tr>
+        <tr class="edit-row" data-action="/assets/{{ a.id }}/edit">
+            <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
+            <td><input name="symbol" value="{{ a.symbol }}" class="edit-input" style="width: 80px; font-family: 'IBM Plex Mono', monospace;"></td>
+            <td><input name="name" value="{{ a.name }}" class="edit-input" style="width: 130px;"></td>
+            <td>
+                <select name="type_code" class="edit-select">
+                    <option value="crypto"{% if a.type_code == "crypto" %} selected{% endif %}>crypto</option>
+                    <option value="stock"{% if a.type_code == "stock" %} selected{% endif %}>stock</option>
+                    <option value="fiat"{% if a.type_code == "fiat" %} selected{% endif %}>fiat</option>
+                    <option value="stable"{% if a.type_code == "stable" %} selected{% endif %}>stable</option>
+                    <option value="nft"{% if a.type_code == "nft" %} selected{% endif %}>nft</option>
+                </select>
+            </td>
+            <td><input name="chain_code" value="{{ a.chain_code }}" class="edit-input" style="width: 80px;"></td>
+            <td>
+                <select name="risk_code" class="edit-select">
+                    <option value=""{% if a.risk_code == "" %} selected{% endif %}>—</option>
+                    <option value="cat1_safe"{% if a.risk_code == "cat1_safe" %} selected{% endif %}>safe</option>
+                    <option value="cat2_medium"{% if a.risk_code == "cat2_medium" %} selected{% endif %}>medium</option>
+                    <option value="cat3_high"{% if a.risk_code == "cat3_high" %} selected{% endif %}>high</option>
+                </select>
+            </td>
+            <td><input name="coingecko_id" value="{{ a.coingecko_id }}" class="edit-input" style="width: 110px; font-size: 0.75rem;"></td>
+            <td><input name="yahoo_ticker" value="{{ a.yahoo_ticker }}" class="edit-input" style="width: 70px; font-size: 0.75rem;"></td>
+            <td class="r"><input name="target_pct" type="number" step="0.01" min="0" max="1" value="{% if a.target_pct > 0.0 %}{{ "{:.2}"|format(a.target_pct) }}{% endif %}" class="edit-input" style="width: 60px; text-align: right;"></td>
+            <td>
+                <label style="font-size: 0.6875rem; color: var(--text-muted);">
+                    <input name="is_stable" type="checkbox" value="on"{% if a.is_stable == 1 %} checked{% endif %}>
+                </label>
+            </td>
+            <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
+            <td style="white-space: nowrap;">
+                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <button class="row-action del" onclick="if(confirm('Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/assets/{{ a.id }}/delete?redirect=/data?tab=assets';document.body.appendChild(f);f.submit()}" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -221,8 +256,14 @@ function deletePosition(tr, label) {
             <div class="form-field"><label>Institution</label><input name="institution" style="width: 160px;"></div>
             <div class="form-field"><label>Chain</label><input name="chain_code" style="width: 100px;"></div>
             <div class="form-field"><label>Notes</label><input name="notes" style="width: 200px;"></div>
+            <div class="form-field" style="justify-content: flex-end;">
+                <label style="font-size: 0.6875rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 6px; text-transform: none; letter-spacing: 0;">
+                    <input name="is_investment" type="checkbox" value="1" checked style="margin: 0;">
+                    investment account
+                </label>
+            </div>
         </div>
-        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Smart delete: an empty account is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
+        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Uncheck <em>investment account</em> for owned-but-not-investment things (car, house, art) — these count toward net worth but stay out of drift/allocation math. Smart delete: an empty account is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
         <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
     </form>
 </details>
@@ -231,22 +272,50 @@ function deletePosition(tr, label) {
 <table>
     <thead>
         <tr>
-            <th>ID</th><th>Name</th><th>Type</th><th>Institution</th>
-            <th>Chain</th><th>Active</th><th>Notes</th><th></th>
+            <th>ID</th><th>Name</th><th>Type</th><th>Kind</th><th>Institution</th>
+            <th>Chain</th><th>Active</th><th>Notes</th>
+            <th style="width: 40px;"><button class="lock-toggle" onclick="toggleLock()" title="Edit"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></button></th>
         </tr>
     </thead>
     <tbody>
         {% for a in accounts %}
-        <tr style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
+        <tr class="view-row" style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
             <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
             <td class="name">{{ a.name }}</td>
             <td class="label">{{ a.type_code }}</td>
+            <td class="label" style="font-size: 0.6875rem;">{% if a.is_investment == 1 %}investment{% else %}<span style="color: var(--info-ink);">owned</span>{% endif %}</td>
             <td class="label">{{ a.institution }}</td>
             <td class="label">{{ a.chain_code }}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td class="label" style="font-size: 0.6875rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">{{ a.notes }}</td>
-            <td class="actions">
-                <a class="del" onclick="if(confirm('Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+            <td></td>
+        </tr>
+        <tr class="edit-row" data-action="/accounts/{{ a.id }}/edit">
+            <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
+            <td><input name="name" value="{{ a.name }}" class="edit-input" style="width: 130px;"></td>
+            <td>
+                <select name="type_code" class="edit-select">
+                    <option value="broker"{% if a.type_code == "broker" %} selected{% endif %}>broker</option>
+                    <option value="bank"{% if a.type_code == "bank" %} selected{% endif %}>bank</option>
+                    <option value="exchange"{% if a.type_code == "exchange" %} selected{% endif %}>exchange</option>
+                    <option value="cash"{% if a.type_code == "cash" %} selected{% endif %}>cash</option>
+                    <option value="crypto"{% if a.type_code == "crypto" %} selected{% endif %}>crypto</option>
+                    <option value="asset"{% if a.type_code == "asset" %} selected{% endif %}>asset</option>
+                </select>
+            </td>
+            <td>
+                <select name="is_investment" class="edit-select" title="Investment vs owned">
+                    <option value="1"{% if a.is_investment == 1 %} selected{% endif %}>investment</option>
+                    <option value="0"{% if a.is_investment == 0 %} selected{% endif %}>owned</option>
+                </select>
+            </td>
+            <td><input name="institution" value="{{ a.institution }}" class="edit-input" style="width: 130px;"></td>
+            <td><input name="chain_code" value="{{ a.chain_code }}" class="edit-input" style="width: 90px;"></td>
+            <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
+            <td><input name="notes" value="{{ a.notes }}" class="edit-input" style="width: 180px;"></td>
+            <td style="white-space: nowrap;">
+                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <button class="row-action del" onclick="if(confirm('Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts';document.body.appendChild(f);f.submit()}" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}

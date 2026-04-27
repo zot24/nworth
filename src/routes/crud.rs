@@ -19,24 +19,43 @@ pub struct AccountForm {
     institution: Option<String>,
     chain_code: Option<String>,
     notes: Option<String>,
+    /// Checkbox value — present when checked ("on"/"true"/"1"), absent when unchecked.
+    is_investment: Option<String>,
+}
+
+fn investment_flag(raw: &Option<String>) -> i64 {
+    match raw.as_deref() {
+        // Unchecked checkbox = not present in form data → default true (investment).
+        // Explicit "0" / "false" → owned. Anything else (including "on") → investment.
+        Some("0") | Some("false") => 0,
+        _ => 1,
+    }
+}
+
+/// Treat empty form fields as NULL. Important for `chain_code` (FK to chains(code))
+/// where an empty string would violate the constraint.
+fn nullable(s: &Option<String>) -> Option<&str> {
+    s.as_deref().filter(|v| !v.is_empty())
 }
 
 pub async fn create_account(
     State(state): State<AppState>,
     Form(f): Form<AccountForm>,
 ) -> Result<Redirect, AppError> {
+    let is_investment = investment_flag(&f.is_investment);
     sqlx::query(
-        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes)
-         VALUES(?1, ?2, ?3, ?4, 1, ?5)",
+        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes, is_investment)
+         VALUES(?1, ?2, ?3, ?4, 1, ?5, ?6)",
     )
     .bind(&f.name)
     .bind(&f.type_code)
-    .bind(&f.institution)
-    .bind(&f.chain_code)
-    .bind(&f.notes)
+    .bind(nullable(&f.institution))
+    .bind(nullable(&f.chain_code))
+    .bind(nullable(&f.notes))
+    .bind(is_investment)
     .execute(&state.pool)
     .await?;
-    Ok(Redirect::to("/accounts"))
+    Ok(Redirect::to("/data?tab=accounts"))
 }
 
 pub async fn update_account(
@@ -44,19 +63,21 @@ pub async fn update_account(
     Path(id): Path<i64>,
     Form(f): Form<AccountForm>,
 ) -> Result<Redirect, AppError> {
+    let is_investment = investment_flag(&f.is_investment);
     sqlx::query(
-        "UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5
-         WHERE id=?6",
+        "UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5, is_investment=?6
+         WHERE id=?7",
     )
     .bind(&f.name)
     .bind(&f.type_code)
-    .bind(&f.institution)
-    .bind(&f.chain_code)
-    .bind(&f.notes)
+    .bind(nullable(&f.institution))
+    .bind(nullable(&f.chain_code))
+    .bind(nullable(&f.notes))
+    .bind(is_investment)
     .bind(id)
     .execute(&state.pool)
     .await?;
-    Ok(Redirect::to("/accounts"))
+    Ok(Redirect::to("/data?tab=accounts"))
 }
 
 pub async fn delete_account(
@@ -112,17 +133,17 @@ pub async fn create_asset(
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,1)",
     )
     .bind(&f.symbol)
-    .bind(&f.name)
+    .bind(nullable(&f.name))
     .bind(&f.type_code)
-    .bind(&f.chain_code)
-    .bind(&f.risk_code)
-    .bind(&f.coingecko_id)
-    .bind(&f.yahoo_ticker)
+    .bind(nullable(&f.chain_code))
+    .bind(nullable(&f.risk_code))
+    .bind(nullable(&f.coingecko_id))
+    .bind(nullable(&f.yahoo_ticker))
     .bind(f.target_pct)
     .bind(is_stable)
     .execute(&state.pool)
     .await?;
-    Ok(Redirect::to("/assets"))
+    Ok(Redirect::to("/data?tab=assets"))
 }
 
 pub async fn update_asset(
@@ -137,18 +158,18 @@ pub async fn update_asset(
          WHERE id=?10",
     )
     .bind(&f.symbol)
-    .bind(&f.name)
+    .bind(nullable(&f.name))
     .bind(&f.type_code)
-    .bind(&f.chain_code)
-    .bind(&f.risk_code)
-    .bind(&f.coingecko_id)
-    .bind(&f.yahoo_ticker)
+    .bind(nullable(&f.chain_code))
+    .bind(nullable(&f.risk_code))
+    .bind(nullable(&f.coingecko_id))
+    .bind(nullable(&f.yahoo_ticker))
     .bind(f.target_pct)
     .bind(is_stable)
     .bind(id)
     .execute(&state.pool)
     .await?;
-    Ok(Redirect::to("/assets"))
+    Ok(Redirect::to("/data?tab=assets"))
 }
 
 pub async fn delete_asset(

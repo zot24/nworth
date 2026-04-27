@@ -7,12 +7,14 @@ use crate::{error::AppError, models::account::Account, AppState};
 #[derive(Template)]
 #[template(path = "accounts.html")]
 struct AccountsTemplate {
-    accounts: Vec<Account>,
+    investments: Vec<Account>,
+    owned: Vec<Account>,
+    total_count: usize,
 }
 
 pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     let accounts = sqlx::query_as::<_, Account>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes
+        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment
          FROM accounts
          WHERE active = 1
          ORDER BY type_code, name",
@@ -20,7 +22,11 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(AccountsTemplate { accounts })
+    let total_count = accounts.len();
+    let (investments, owned): (Vec<Account>, Vec<Account>) = accounts.into_iter()
+        .partition(|a| a.is_investment == 1);
+
+    Ok(AccountsTemplate { investments, owned, total_count })
 }
 
 #[derive(Debug)]
@@ -45,7 +51,7 @@ pub async fn detail(
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     let account = sqlx::query_as::<_, Account>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes
+        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment
          FROM accounts WHERE id = ?1",
     )
     .bind(id)
