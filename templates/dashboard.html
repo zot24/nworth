@@ -28,6 +28,7 @@
         <div class="hero-eyebrow" id="hero-eyebrow">Net Worth</div>
         <div class="hero-value" id="hero-value">—</div>
         <div class="hero-delta" id="hero-delta"></div>
+        <div class="hero-split" id="hero-split" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.375rem; display: none;"></div>
     </div>
     <div style="flex: 1; max-width: 200px; align-self: flex-end;">
         <canvas id="hero-spark" class="sparkline" height="36"></canvas>
@@ -119,6 +120,15 @@ function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
     if (delta30) {
         const cls = classForDelta(delta30.delta_usd);
         heroDelta.innerHTML = `<span class="${cls}"><span class="arrow">${arrow(delta30.delta_usd)}</span>${fmtSigned(delta30.delta_usd)} ${delta30.delta_pct >= 0 ? '+' : ''}${delta30.delta_pct.toFixed(2)}%</span><span class="meta">last 30 days</span>`;
+    }
+
+    // Tradable / owned split — only surface when there's owned value to break out
+    const ownedVal = summary.drift.owned_value || 0;
+    const tradableVal = summary.drift.tradable_value || 0;
+    if (ownedVal > 0) {
+        const split = document.getElementById('hero-split');
+        split.textContent = `Tradable ${fmtMoney(tradableVal)} · Owned ${fmtMoney(ownedVal)}`;
+        split.style.display = '';
     }
 
     // Decision stat blocks
