@@ -33,8 +33,10 @@
     <a href="/data?tab=assets&asset_type=owned" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">owned</a>
 </div>
 
+<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem;">Catalog of every asset known to the app. To start tracking something you actually own, use <a href="/data?tab=positions" style="color: var(--text); text-decoration: underline;">/data?tab=positions → + track new holding</a> — that flow creates the asset row + the position in one step. Use this tab to edit asset metadata or pre-catalog something you're researching.</p>
+
 <details>
-    <summary class="add-link">+ add asset</summary>
+    <summary class="add-link">+ pre-catalog asset</summary>
     <form method="POST" action="/assets/new" style="margin: 1rem 0 2rem; padding: 1rem 0; border-top: 1px solid var(--border);">
         <div class="form-row">
             <div class="form-field"><label>Symbol <span class="neg" title="required">*</span></label><input name="symbol" required style="width: 100px;"></div>
@@ -57,7 +59,7 @@
             <div class="form-field"><label>Yahoo</label><input name="yahoo_ticker" style="width: 80px;"></div>
             <div class="form-field"><label>Target %</label><input name="target_pct" type="number" step="0.01" style="width: 80px;"></div>
         </div>
-        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Smart delete: an unused asset is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
+        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Use this only when you want to track an asset's metadata without a holding (e.g. a stock you're researching). Smart delete: an unused asset is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
         <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
     </form>
 </details>
@@ -201,6 +203,67 @@
 {% else if is_positions %}
 
 <p class="secondary" style="font-size: 0.8125rem; margin-bottom: 1rem;">Quantity and avg cost are editable. <code>last_price</code> is managed by the pricefeed and <code>value_usd</code> is recomputed on next snapshot. Click ✓ to save a row.</p>
+
+<details>
+    <summary class="add-link">+ track new holding</summary>
+    <form method="POST" action="/positions/track" style="margin: 1rem 0 2rem; padding: 1rem 0; border-top: 1px solid var(--border);">
+        <div class="form-row">
+            <div class="form-field"><label>Account <span class="neg" title="required">*</span></label>
+                <select name="account_id" required style="width: 180px;">
+                    {% for a in accounts %}{% if a.active == 1 %}<option value="{{ a.id }}">{{ a.name }}</option>{% endif %}{% endfor %}
+                </select>
+            </div>
+            <div class="form-field"><label>Asset</label>
+                <select onchange="toggleAssetMode(this)" style="width: 130px;">
+                    <option value="existing">pick existing</option>
+                    <option value="new">create new</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row asset-existing-fields">
+            <div class="form-field"><label>Existing asset <span class="neg" title="required">*</span></label>
+                <select name="asset_id" required style="width: 280px;">
+                    {% for a in assets %}{% if a.active == 1 %}<option value="{{ a.id }}">{{ a.symbol }}{% if !a.name.is_empty() %} — {{ a.name }}{% endif %} ({{ a.type_code }})</option>{% endif %}{% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row asset-new-fields" style="display: none;">
+            <div class="form-field"><label>Symbol <span class="neg" title="required">*</span></label><input name="asset_symbol" placeholder="VOO" style="width: 100px; font-family: 'IBM Plex Mono', monospace;" disabled></div>
+            <div class="form-field"><label>Name</label><input name="asset_name" placeholder="Vanguard S&amp;P 500" style="width: 180px;" disabled></div>
+            <div class="form-field"><label>Type <span class="neg" title="required">*</span></label>
+                <select name="asset_type_code" style="width: 100px;" disabled>
+                    <option value="crypto">crypto</option><option value="stock">stock</option>
+                    <option value="fiat">fiat</option><option value="stable">stable</option>
+                    <option value="nft">nft</option><option value="owned">owned</option>
+                </select>
+            </div>
+            <div class="form-field"><label>Chain</label><input name="asset_chain_code" style="width: 80px;" disabled></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-field"><label>Quantity <span class="neg" title="required">*</span></label><input name="quantity" type="number" step="0.0001" required style="width: 110px;"></div>
+            <div class="form-field"><label>Avg cost (USD)</label><input name="avg_cost" type="number" step="0.01" style="width: 110px;"></div>
+        </div>
+
+        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. For tradable assets the pricefeed updates <code>value_usd</code> on the next <em>snapshot</em> in the nav. For <code>owned</code>-type assets there's no pricefeed, so <code>avg_cost</code> doubles as the value-per-unit and today's snapshot is seeded automatically.</p>
+        <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
+    </form>
+</details>
+
+<script>
+function toggleAssetMode(sel) {
+    const form = sel.closest('form');
+    const isExisting = sel.value === 'existing';
+    form.querySelector('.asset-existing-fields').style.display = isExisting ? '' : 'none';
+    form.querySelector('.asset-new-fields').style.display = isExisting ? 'none' : '';
+    // Disabled inputs aren't submitted, so the backend cleanly receives only the
+    // active branch's fields.
+    form.querySelectorAll('.asset-existing-fields select').forEach(el => el.disabled = !isExisting);
+    form.querySelectorAll('.asset-new-fields input, .asset-new-fields select').forEach(el => el.disabled = isExisting);
+}
+</script>
 
 <div style="overflow-x: auto;">
 <table>

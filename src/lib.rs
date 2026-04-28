@@ -98,6 +98,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/income/:id/edit", post(routes::crud::update_income))
         .route("/expenses/:id/edit", post(routes::crud::update_expense))
         .route("/positions/upsert", post(routes::crud::upsert_position_form))
+        .route("/positions/track", post(routes::crud::track_holding))
         .route("/positions/:acct/:asset/delete", post(routes::crud::delete_position_form))
         .route("/snapshots/:id/edit", post(routes::crud::update_snapshot))
         // REST API v1 — full JSON CRUD

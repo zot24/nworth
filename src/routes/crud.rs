@@ -528,6 +528,117 @@ pub async fn upsert_position_form(
     Ok(Redirect::to(f.redirect.as_deref().unwrap_or("/positions")))
 }
 
+/// "Track new holding" — the primary entry point for adding what you own.
+/// Bundles the find-or-create asset step with position upsert (and seeds an
+/// initial snapshot for owned-type assets, which have no pricefeed).
+///
+/// Two submission shapes:
+///   1. Existing asset picked: `asset_id` is set; the new-asset fields are ignored.
+///   2. New asset created: `asset_id` is None; `asset_symbol` + `asset_type_code`
+///      are required, the rest are optional. Looked up by `(symbol, type_code)`
+///      first so re-using an existing symbol just attaches a position to it.
+#[derive(Deserialize)]
+pub struct TrackHoldingForm {
+    account_id: i64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    asset_id: Option<i64>,
+    asset_symbol: Option<String>,
+    asset_name: Option<String>,
+    asset_type_code: Option<String>,
+    asset_chain_code: Option<String>,
+    quantity: f64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    avg_cost: Option<f64>,
+}
+
+pub async fn track_holding(
+    State(state): State<AppState>,
+    Form(f): Form<TrackHoldingForm>,
+) -> Result<Redirect, AppError> {
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+
+    // Resolve asset_id — either explicit (existing pick) or derived via
+    // find-or-create on (symbol, type_code). UNIQUE(symbol, type_code) on the
+    // assets table means re-using an existing symbol just hands back the same id.
+    let asset_id = match f.asset_id {
+        Some(id) => id,
+        None => {
+            let symbol = f.asset_symbol.as_deref().unwrap_or("").trim().to_uppercase();
+            if symbol.is_empty() {
+                return Err(AppError::BadRequest(
+                    "asset_symbol required when no asset_id is provided".into(),
+                ));
+            }
+            let type_code = f.asset_type_code.as_deref().unwrap_or("").trim().to_string();
+            if type_code.is_empty() {
+                return Err(AppError::BadRequest(
+                    "asset_type_code required when no asset_id is provided".into(),
+                ));
+            }
+            match sqlx::query_scalar::<_, i64>(
+                "SELECT id FROM assets WHERE symbol = ?1 AND type_code = ?2",
+            ).bind(&symbol).bind(&type_code).fetch_optional(&state.pool).await? {
+                Some(id) => id,
+                None => sqlx::query_scalar(
+                    "INSERT INTO assets(symbol, name, type_code, chain_code, is_stable, active)
+                     VALUES(?1, ?2, ?3, ?4, 0, 1) RETURNING id",
+                )
+                .bind(&symbol)
+                .bind(f.asset_name.as_deref().filter(|v| !v.is_empty()))
+                .bind(&type_code)
+                .bind(f.asset_chain_code.as_deref().filter(|v| !v.is_empty()))
+                .fetch_one(&state.pool).await?,
+            }
+        }
+    };
+
+    sqlx::query(
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, last_price, value_usd, as_of)
+         VALUES(?1, ?2, ?3, ?4, 0, 0, ?5)
+         ON CONFLICT(account_id, asset_id) DO UPDATE SET
+           quantity = excluded.quantity,
+           avg_cost = COALESCE(excluded.avg_cost, positions.avg_cost),
+           as_of    = excluded.as_of",
+    )
+    .bind(f.account_id)
+    .bind(asset_id)
+    .bind(f.quantity)
+    .bind(f.avg_cost)
+    .bind(&today)
+    .execute(&state.pool).await?;
+
+    // Owned-type assets have no pricefeed — without a manual snapshot the new
+    // holding wouldn't show up in net worth at all. Treat avg_cost as the
+    // per-unit value and seed today's snapshot for value = quantity * avg_cost.
+    let asset_type: String = sqlx::query_scalar(
+        "SELECT type_code FROM assets WHERE id = ?1",
+    ).bind(asset_id).fetch_one(&state.pool).await?;
+    if asset_type == "owned" {
+        if let Some(price) = f.avg_cost {
+            let value = f.quantity * price;
+            if value > 0.0 {
+                sqlx::query(
+                    "INSERT INTO snapshots(as_of, account_id, asset_id, quantity, price_usd, value_usd, source)
+                     VALUES(?1, ?2, ?3, ?4, ?5, ?6, 'manual')
+                     ON CONFLICT(as_of, account_id, asset_id) DO UPDATE SET
+                       quantity = excluded.quantity,
+                       price_usd = excluded.price_usd,
+                       value_usd = excluded.value_usd",
+                )
+                .bind(&today)
+                .bind(f.account_id)
+                .bind(asset_id)
+                .bind(f.quantity)
+                .bind(price)
+                .bind(value)
+                .execute(&state.pool).await?;
+            }
+        }
+    }
+
+    Ok(Redirect::to("/data?tab=positions"))
+}
+
 pub async fn delete_position_form(
     State(state): State<AppState>,
     Path((acct, asset)): Path<(i64, i64)>,
