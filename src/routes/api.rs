@@ -338,13 +338,23 @@ pub struct ExpenseMonthly {
     pub place: Option<String>,
 }
 
-/// GET /api/expenses/monthly
+/// GET /api/expenses/monthly?year=YYYY|all
+/// Filter to a single year when `year` is "YYYY"; otherwise return everything.
 pub async fn expenses_monthly(
     State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<ExpenseMonthly>>, AppError> {
+    let (lo, hi) = match q.get("year").map(String::as_str) {
+        Some(y) if y != "all" && y.len() == 4 && y.chars().all(|c| c.is_ascii_digit()) => {
+            (format!("{y}-01-01"), format!("{y}-12-31"))
+        }
+        _ => ("0000-01-01".to_string(), "9999-12-31".to_string()),
+    };
     let rows: Vec<(String, f64, Option<String>)> = sqlx::query_as(
-        "SELECT as_of, amount_usd, place FROM expenses ORDER BY as_of",
+        "SELECT as_of, amount_usd, place FROM expenses
+         WHERE as_of >= ?1 AND as_of <= ?2 ORDER BY as_of",
     )
+    .bind(&lo).bind(&hi)
     .fetch_all(&state.pool)
     .await?;
 

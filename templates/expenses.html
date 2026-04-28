@@ -8,15 +8,27 @@
     <a href="/data?tab=expenses" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
 </div>
 
+<div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; font-size: 0.75rem;">
+    <span style="color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Year:</span>
+    <a href="/expenses?year=all" style="text-decoration: none; {% if all_selected %}color: var(--text); font-weight: 600; border-bottom: 1.5px solid var(--text);{% else %}color: var(--text-muted);{% endif %}">all</a>
+    {% for opt in year_options %}
+    <a href="/expenses?year={{ opt.year }}" style="font-family: 'IBM Plex Mono', monospace; text-decoration: none; {% if opt.selected %}color: var(--text); font-weight: 600; border-bottom: 1.5px solid var(--text);{% else %}color: var(--text-muted);{% endif %}">{{ opt.year }}</a>
+    {% endfor %}
+</div>
+
 <div style="margin-bottom: 1rem;">
-    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem;">YTD Expenses</div>
-    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400;">${{ "{:.0}"|format(current_year_total) }}</div>
+    <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem;">{{ period_label }} expenses</div>
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400;">${{ "{:.0}"|format(period_total) }}</div>
 </div>
 
 <dl class="stat-row">
     <div>
-        <dt>Latest Month</dt>
-        <dd>${{ "{:.0}"|format(current_month_amount) }}</dd>
+        <dt>Monthly Avg</dt>
+        <dd>${{ "{:.0}"|format(period_avg) }}</dd>
+    </div>
+    <div>
+        <dt>Largest Month</dt>
+        <dd>${{ "{:.0}"|format(period_max) }}</dd>
     </div>
     <div>
         <dt>As Of</dt>
@@ -111,9 +123,13 @@ async function loadCategoryChart(window) {
 }
 
 (async () => {
-    // Monthly stack — tooltip shows location above the dollar amount so you
-    // can read at a glance "Sept 2024 in Asia, $4.2k" instead of just the bar.
-    const monthly = await (await fetch('/api/expenses/monthly')).json();
+    // Monthly stack — tooltip puts location into the title alongside the date,
+    // and the label line is the dollar amount. Reads as e.g.
+    //   "2024-09-01 · Asia"
+    //   "$4,200"
+    const yearParam = new URLSearchParams(window.location.search).get('year') || 'all';
+    const monthlyUrl = '/api/expenses/monthly' + (yearParam !== 'all' ? '?year=' + yearParam : '');
+    const monthly = await (await fetch(monthlyUrl)).json();
     const places = monthly.map(d => d.place || '');
     new Chart(document.getElementById('expenses-chart'), {
         type: 'bar',
@@ -127,12 +143,13 @@ async function loadCategoryChart(window) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: items => items[0].label,
-                        label: ctx => {
-                            const place = places[ctx.dataIndex];
-                            const amt = '$' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 0});
-                            return place ? [place, amt] : amt;
+                        title: items => {
+                            const i = items[0].dataIndex;
+                            const date = items[0].label;
+                            const place = places[i];
+                            return place ? date + ' · ' + place : date;
                         },
+                        label: ctx => '$' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 0}),
                     },
                 },
             },
