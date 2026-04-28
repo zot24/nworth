@@ -333,21 +333,24 @@ pub async fn income_monthly(
 pub struct ExpenseMonthly {
     pub as_of: String,
     pub amount_usd: f64,
+    /// Optional location/group label (e.g. "South America", "Argentina") so
+    /// the chart tooltip can show context above the dollar amount.
+    pub place: Option<String>,
 }
 
 /// GET /api/expenses/monthly
 pub async fn expenses_monthly(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ExpenseMonthly>>, AppError> {
-    let rows: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT as_of, amount_usd FROM expenses ORDER BY as_of",
+    let rows: Vec<(String, f64, Option<String>)> = sqlx::query_as(
+        "SELECT as_of, amount_usd, place FROM expenses ORDER BY as_of",
     )
     .fetch_all(&state.pool)
     .await?;
 
     Ok(Json(
         rows.into_iter()
-            .map(|(as_of, amount_usd)| ExpenseMonthly { as_of, amount_usd })
+            .map(|(as_of, amount_usd, place)| ExpenseMonthly { as_of, amount_usd, place })
             .collect(),
     ))
 }

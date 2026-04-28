@@ -111,15 +111,33 @@ async function loadCategoryChart(window) {
 }
 
 (async () => {
-    // Monthly stack (existing)
+    // Monthly stack — tooltip shows location above the dollar amount so you
+    // can read at a glance "Sept 2024 in Asia, $4.2k" instead of just the bar.
     const monthly = await (await fetch('/api/expenses/monthly')).json();
+    const places = monthly.map(d => d.place || '');
     new Chart(document.getElementById('expenses-chart'), {
         type: 'bar',
         data: {
             labels: monthly.map(d => d.as_of),
             datasets: [{ data: monthly.map(d => d.amount_usd), backgroundColor: PALETTE[3], borderWidth: 0 }],
         },
-        options: { responsive: true, plugins: { legend: { display: false } }, scales: darkScale(false) },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => items[0].label,
+                        label: ctx => {
+                            const place = places[ctx.dataIndex];
+                            const amt = '$' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 0});
+                            return place ? [place, amt] : amt;
+                        },
+                    },
+                },
+            },
+            scales: darkScale(false),
+        },
     });
 
     // Initial category breakdown
