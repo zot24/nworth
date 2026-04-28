@@ -371,8 +371,8 @@ function deletePosition(tr, label) {
                 <select name="type_code" required style="width: 120px;">
                     <option value="broker">broker</option><option value="bank">bank</option>
                     <option value="exchange">exchange</option><option value="wallet">wallet</option>
-                    <option value="cash">cash</option><option value="crypto">crypto</option>
-                    <option value="asset">asset</option>
+                    <option value="cash">cash</option><option value="credit">credit</option>
+                    <option value="crypto">crypto</option><option value="asset">asset</option>
                 </select>
             </div>
             <div class="form-field"><label>Institution</label><input name="institution" style="width: 160px;"></div>
@@ -423,6 +423,7 @@ function deletePosition(tr, label) {
                     <option value="exchange"{% if a.type_code == "exchange" %} selected{% endif %}>exchange</option>
                     <option value="wallet"{% if a.type_code == "wallet" %} selected{% endif %}>wallet</option>
                     <option value="cash"{% if a.type_code == "cash" %} selected{% endif %}>cash</option>
+                    <option value="credit"{% if a.type_code == "credit" %} selected{% endif %}>credit</option>
                     <option value="crypto"{% if a.type_code == "crypto" %} selected{% endif %}>crypto</option>
                     <option value="asset"{% if a.type_code == "asset" %} selected{% endif %}>asset</option>
                 </select>
