@@ -523,11 +523,17 @@
     Chart.defaults.plugins.tooltip.titleFont = { family: "'Source Sans 3', sans-serif", size: 11 };
     Chart.defaults.plugins.tooltip.bodyFont = { family: "'IBM Plex Mono', monospace", size: 11 };
     Chart.defaults.plugins.tooltip.displayColors = false;
-    Chart.defaults.plugins.tooltip.callbacks = {
-        label: ctx => {
-            const v = ctx.parsed.y ?? ctx.parsed;
-            return ctx.dataset.label + ': $' + Number(v).toLocaleString(undefined, {maximumFractionDigits: 0});
-        }
+    // Override only the `label` callback. Replacing `callbacks` wholesale
+    // wipes out Chart.js's other default callbacks (afterTitle, beforeBody,
+    // footer, etc.) which the v4 tooltip renderer needs — that breaks
+    // tooltip display *globally* across every chart, even ones that supply
+    // their own title + label.
+    Chart.defaults.plugins.tooltip.callbacks.label = ctx => {
+        const v = ctx.parsed && typeof ctx.parsed === 'object' ? ctx.parsed.y : ctx.parsed;
+        const num = Number(v);
+        if (!Number.isFinite(num)) return '';
+        const prefix = ctx.dataset && ctx.dataset.label ? ctx.dataset.label + ': ' : '';
+        return prefix + '$' + num.toLocaleString(undefined, {maximumFractionDigits: 0});
     };
     applyChartDefaults();
 

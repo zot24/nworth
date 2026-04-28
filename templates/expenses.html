@@ -139,9 +139,15 @@ async function loadCategoryChart(window) {
         },
         options: {
             responsive: true,
+            // Trigger the tooltip anywhere along a bar's x-position (not only
+            // when the cursor is exactly inside the bar's pixel rect).
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    enabled: true,
+                    mode: 'index',
+                    intersect: false,
                     callbacks: {
                         title: items => {
                             const i = items[0].dataIndex;
