@@ -6,17 +6,22 @@
 <h1 style="font-size: 1.5rem; font-weight: 400; margin-bottom: 0.5rem;">Data Editor</h1>
 <p class="secondary" style="font-size: 0.8125rem; margin-bottom: 1.5rem;">Raw database tables. Edit, delete, or add rows directly.</p>
 
-<!-- Tab nav -->
-<div style="display: flex; gap: 0; margin-bottom: 2rem; border-bottom: 2px solid var(--border-strong); flex-wrap: wrap;">
+<!-- Tab nav. The frequently-used tabs are listed first. Assets + snapshots
+     are after a flexible spacer so they sit at the right edge with a more
+     muted style — they're rarely interacted with directly now that the
+     unified track-holding flow on /data?tab=positions is the primary entry
+     point for adding/editing holdings. -->
+<div style="display: flex; gap: 0; margin-bottom: 2rem; border-bottom: 2px solid var(--border-strong); flex-wrap: wrap; align-items: end;">
     <a href="/data?tab=accounts" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_accounts %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">accounts</a>
-    <a href="/data?tab=assets" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_assets %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">assets</a>
-    <a href="/data?tab=snapshots&as_of={{ selected_date }}" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_snapshots %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">snapshots</a>
     <a href="/data?tab=positions" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_positions %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">positions</a>
     <a href="/data?tab=income" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_income %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">income</a>
     <a href="/data?tab=expenses" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_expenses %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">expenses</a>
     <a href="/data?tab=targets" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_targets %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">targets</a>
     <a href="/data?tab=categories" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_categories %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">categories</a>
     <a href="/data?tab=labels" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; {% if is_labels %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;{% else %}color: var(--text-muted);{% endif %}">labels</a>
+    <span style="flex: 1;"></span>
+    <a href="/data?tab=assets" style="padding: 8px 14px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none; opacity: 0.7; {% if is_assets %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600; opacity: 1;{% else %}color: var(--text-muted);{% endif %}" title="Catalog of asset metadata — rarely needed directly">assets</a>
+    <a href="/data?tab=snapshots&as_of={{ selected_date }}" style="padding: 8px 14px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none; opacity: 0.7; {% if is_snapshots %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600; opacity: 1;{% else %}color: var(--text-muted);{% endif %}" title="Raw point-in-time valuations — rarely edited directly">snapshots</a>
 </div>
 
 <!-- ═══════ ASSETS TAB ═══════ -->
@@ -33,7 +38,33 @@
     <a href="/data?tab=assets&asset_type=owned" style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline;">owned</a>
 </div>
 
-<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem;">Catalog of every asset known to the app. To start tracking something you actually own, use <a href="/data?tab=positions" style="color: var(--text); text-decoration: underline;">/data?tab=positions → + track new holding</a> — that flow creates the asset row + the position in one step. Use this tab to edit asset metadata or pre-catalog something you're researching.</p>
+<!-- One-time onboarding popup explaining what the assets tab is for. Auto-shows
+     on first visit; "Don't show again" persists dismissal in localStorage. -->
+<dialog id="info-assets-tab" class="app-modal" data-info-key="info:assets-tab:v1">
+    <p class="app-modal-message">Catalog of every asset known to the app. To start tracking something you actually own, use <a href="/data?tab=positions" style="color: var(--text); text-decoration: underline;">/data?tab=positions → + track new holding</a> — that flow creates the asset row + the position in one step. Use this tab to edit asset metadata or pre-catalog something you're researching.</p>
+    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); margin: -0.5rem 0 1rem;">
+        <input type="checkbox" class="info-dont-show"> Don't show this again
+    </label>
+    <div class="app-modal-actions">
+        <button type="button" class="app-modal-confirm">Got it</button>
+    </div>
+</dialog>
+<script>
+(function() {
+    const dlg = document.getElementById('info-assets-tab');
+    if (!dlg) return;
+    const key = dlg.dataset.infoKey;
+    if (localStorage.getItem(key) === '1') return;
+    const close = () => {
+        if (dlg.querySelector('.info-dont-show').checked) localStorage.setItem(key, '1');
+        if (dlg.open) dlg.close();
+    };
+    dlg.querySelector('.app-modal-confirm').addEventListener('click', close);
+    dlg.addEventListener('cancel', e => { e.preventDefault(); close(); });
+    dlg.addEventListener('click', e => { if (e.target === dlg) close(); });
+    dlg.showModal();
+})();
+</script>
 
 <details>
     <summary class="add-link">+ pre-catalog asset</summary>
