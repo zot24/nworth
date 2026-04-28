@@ -38,6 +38,24 @@ fn nullable(s: &Option<String>) -> Option<&str> {
     s.as_deref().filter(|v| !v.is_empty())
 }
 
+/// Coerce an empty form field into `None` before parsing as a number. HTML
+/// `<input type="number">` posts `""` when blank, which serde_urlencoded then
+/// fails to deserialize as `Option<T>` for any numeric T. Apply via
+/// `#[serde(default, deserialize_with = "empty_string_as_none")]` on every
+/// optional numeric field that comes from a form.
+fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let opt: Option<String> = serde::Deserialize::deserialize(de)?;
+    match opt.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => s.parse::<T>().map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
 pub async fn create_account(
     State(state): State<AppState>,
     Form(f): Form<AccountForm>,
@@ -124,6 +142,7 @@ pub struct AssetForm {
     risk_code: Option<String>,
     coingecko_id: Option<String>,
     yahoo_ticker: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     target_pct: Option<f64>,
     is_stable: Option<String>, // "on" or missing
 }
@@ -211,7 +230,9 @@ pub(crate) async fn smart_delete_asset(pool: &sqlx::SqlitePool, id: i64) -> Resu
 pub struct IncomeForm {
     as_of: String,
     salary_usd: f64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     bonus_usd: Option<f64>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     taxes_usd: Option<f64>,
     company: Option<String>,
 }
@@ -257,6 +278,7 @@ pub struct ExpenseForm {
     as_of: String,
     amount_usd: f64,
     place: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     category_id: Option<i64>,
     /// Comma-separated list of label IDs from a multi-select hidden input.
     label_ids: Option<String>,
@@ -316,6 +338,7 @@ pub struct SnapshotForm {
     account_id: i64,
     asset_id: i64,
     quantity: f64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     price_usd: Option<f64>,
     value_usd: f64,
 }
@@ -477,6 +500,7 @@ pub struct PositionForm {
     account_id: i64,
     asset_id: i64,
     quantity: f64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     avg_cost: Option<f64>,
     redirect: Option<String>,
 }
@@ -522,6 +546,7 @@ pub async fn delete_position_form(
 #[derive(Deserialize)]
 pub struct SnapshotEditForm {
     quantity: f64,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     price_usd: Option<f64>,
     value_usd: f64,
     redirect: Option<String>,
@@ -549,6 +574,7 @@ pub async fn update_snapshot(
 #[derive(Deserialize)]
 pub struct CategoryForm {
     name: String,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     parent_id: Option<i64>,
     color: Option<String>,
 }
