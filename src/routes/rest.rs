@@ -37,7 +37,7 @@ pub struct AccountOut {
     pub chain_code: Option<String>,
     pub active: i64,
     pub notes: Option<String>,
-    pub is_investment: i64,
+    pub role: String,
 }
 
 #[derive(Deserialize)]
@@ -47,13 +47,21 @@ pub struct AccountIn {
     pub institution: Option<String>,
     pub chain_code: Option<String>,
     pub notes: Option<String>,
-    /// Defaults to true. Set false for owned-but-not-investment assets like a car or house.
-    pub is_investment: Option<bool>,
+    /// 'investment' | 'operating' | 'property'. Defaults to 'investment'.
+    pub role: Option<String>,
+}
+
+fn role_or_default(raw: Option<&str>) -> &'static str {
+    match raw {
+        Some("operating") => "operating",
+        Some("property") => "property",
+        _ => "investment",
+    }
 }
 
 pub async fn list_accounts(State(s): State<AppState>) -> Result<Json<Vec<AccountOut>>, AppError> {
     let rows = sqlx::query_as::<_, AccountOut>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment FROM accounts ORDER BY type_code, name",
+        "SELECT id, name, type_code, institution, chain_code, active, notes, role FROM accounts ORDER BY type_code, name",
     )
     .fetch_all(&s.pool)
     .await?;
@@ -62,7 +70,7 @@ pub async fn list_accounts(State(s): State<AppState>) -> Result<Json<Vec<Account
 
 pub async fn get_account(State(s): State<AppState>, Path(id): Path<i64>) -> Result<Json<AccountOut>, AppError> {
     let row = sqlx::query_as::<_, AccountOut>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment FROM accounts WHERE id=?1",
+        "SELECT id, name, type_code, institution, chain_code, active, notes, role FROM accounts WHERE id=?1",
     )
     .bind(id)
     .fetch_one(&s.pool)
@@ -71,23 +79,23 @@ pub async fn get_account(State(s): State<AppState>, Path(id): Path<i64>) -> Resu
 }
 
 pub async fn create_account_json(State(s): State<AppState>, Json(body): Json<AccountIn>) -> Result<(StatusCode, Json<AccountOut>), AppError> {
-    let is_investment: i64 = if body.is_investment.unwrap_or(true) { 1 } else { 0 };
+    let role = role_or_default(body.role.as_deref());
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes, is_investment) VALUES(?1,?2,?3,?4,1,?5,?6) RETURNING id",
+        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes, role) VALUES(?1,?2,?3,?4,1,?5,?6) RETURNING id",
     )
-    .bind(&body.name).bind(&body.type_code).bind(&body.institution).bind(&body.chain_code).bind(&body.notes).bind(is_investment)
+    .bind(&body.name).bind(&body.type_code).bind(&body.institution).bind(&body.chain_code).bind(&body.notes).bind(role)
     .fetch_one(&s.pool).await?;
-    let row = sqlx::query_as::<_, AccountOut>("SELECT id, name, type_code, institution, chain_code, active, notes, is_investment FROM accounts WHERE id=?1")
+    let row = sqlx::query_as::<_, AccountOut>("SELECT id, name, type_code, institution, chain_code, active, notes, role FROM accounts WHERE id=?1")
         .bind(id).fetch_one(&s.pool).await?;
     Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update_account_json(State(s): State<AppState>, Path(id): Path<i64>, Json(body): Json<AccountIn>) -> Result<Json<AccountOut>, AppError> {
-    let is_investment: i64 = if body.is_investment.unwrap_or(true) { 1 } else { 0 };
-    sqlx::query("UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5, is_investment=?6 WHERE id=?7")
-        .bind(&body.name).bind(&body.type_code).bind(&body.institution).bind(&body.chain_code).bind(&body.notes).bind(is_investment).bind(id)
+    let role = role_or_default(body.role.as_deref());
+    sqlx::query("UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5, role=?6 WHERE id=?7")
+        .bind(&body.name).bind(&body.type_code).bind(&body.institution).bind(&body.chain_code).bind(&body.notes).bind(role).bind(id)
         .execute(&s.pool).await?;
-    let row = sqlx::query_as::<_, AccountOut>("SELECT id, name, type_code, institution, chain_code, active, notes, is_investment FROM accounts WHERE id=?1")
+    let row = sqlx::query_as::<_, AccountOut>("SELECT id, name, type_code, institution, chain_code, active, notes, role FROM accounts WHERE id=?1")
         .bind(id).fetch_one(&s.pool).await?;
     Ok(Json(row))
 }

@@ -46,8 +46,12 @@ pub struct CategoryDrift {
 #[derive(Serialize)]
 pub struct DriftReport {
     pub total_value: f64,
-    pub tradable_value: f64,    // investment accounts only — drift denominator
-    pub owned_value: f64,       // is_investment=0 accounts (car, future house, etc.)
+    pub tradable_value: f64,    // role='investment' — drift denominator
+    pub operating_value: f64,   // role='operating' — net-worth-only liquid cash
+    pub property_value: f64,    // role='property' — net-worth-only physical things
+    /// Backwards-compat alias for clients that read the old key. Equals
+    /// operating_value + property_value.
+    pub owned_value: f64,
     pub active_mode: String,
     pub abs_drift_pp: f64,
     pub categories: Vec<CategoryDrift>,
@@ -62,7 +66,8 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
     let latest = latest_as_of(pool).await?;
     if latest.is_empty() {
         return Ok(DriftReport {
-            total_value: 0.0, tradable_value: 0.0, owned_value: 0.0,
+            total_value: 0.0, tradable_value: 0.0, operating_value: 0.0,
+            property_value: 0.0, owned_value: 0.0,
             active_mode: "crab".into(), abs_drift_pp: 0.0,
             categories: vec![],
         });
@@ -72,13 +77,20 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
     let cat_values = category_values(pool, &latest).await?;
     let tradable: f64 = cat_values.values().sum();
 
-    // Owned-asset value (is_investment = 0) — counted in net worth but not in drift
-    let owned: f64 = sqlx::query_scalar::<_, f64>(
+    // Net-worth-only buckets per role.
+    let operating: f64 = sqlx::query_scalar::<_, f64>(
         "SELECT COALESCE(SUM(s.value_usd) * 1.0, 0.0)
          FROM snapshots s
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE s.as_of = ?1 AND ac.is_investment = 0",
+         WHERE s.as_of = ?1 AND ac.role = 'operating'",
     ).bind(&latest).fetch_one(pool).await?;
+    let property: f64 = sqlx::query_scalar::<_, f64>(
+        "SELECT COALESCE(SUM(s.value_usd) * 1.0, 0.0)
+         FROM snapshots s
+         JOIN accounts ac ON ac.id = s.account_id
+         WHERE s.as_of = ?1 AND ac.role = 'property'",
+    ).bind(&latest).fetch_one(pool).await?;
+    let owned = operating + property;
     let total = tradable + owned;
 
     let active_mode = overall_market_mode(pool).await?;
@@ -116,6 +128,8 @@ async fn compute_drift(pool: &SqlitePool) -> Result<DriftReport, AppError> {
     Ok(DriftReport {
         total_value: total,
         tradable_value: tradable,
+        operating_value: operating,
+        property_value: property,
         owned_value: owned,
         active_mode,
         abs_drift_pp,
@@ -154,7 +168,7 @@ async fn compute_concentration(pool: &SqlitePool) -> Result<ConcentrationReport,
          JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
          WHERE s.as_of = ?1
-           AND ac.is_investment = 1
+           AND ac.role = 'investment'
            AND a.symbol != 'STOCKS_TOTAL'
          GROUP BY a.symbol
          ORDER BY SUM(s.value_usd) DESC",
@@ -452,7 +466,8 @@ fn humanize_cat(c: &str) -> String {
         "stocks" => "Stocks".into(),
         "crypto" => "Crypto".into(),
         "cash" => "Cash".into(),
-        "owned" => "Owned".into(),
+        "operating" => "Operating".into(),
+        "property" => "Property".into(),
         other => other.to_string(),
     }
 }
@@ -575,8 +590,8 @@ pub async fn wealth(State(s): State<AppState>) -> Result<Json<WealthReport>, App
         return Ok(Json(WealthReport { as_of: "".into(), total_value: 0.0, holdings: vec![] }));
     }
     // Per (asset, account) snapshot rows
-    let rows: Vec<(i64, String, Option<String>, String, String, i64, f64, Option<f64>, f64)> = sqlx::query_as(
-        "SELECT a.id, a.symbol, a.name, a.type_code, ac.name, ac.is_investment, s.quantity * 1.0, s.price_usd, s.value_usd * 1.0
+    let rows: Vec<(i64, String, Option<String>, String, String, String, f64, Option<f64>, f64)> = sqlx::query_as(
+        "SELECT a.id, a.symbol, a.name, a.type_code, ac.name, ac.role, s.quantity * 1.0, s.price_usd, s.value_usd * 1.0
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
@@ -593,17 +608,19 @@ pub async fn wealth(State(s): State<AppState>) -> Result<Json<WealthReport>, App
         .map(|c| (c.category.clone(), c.drift_pp)).collect();
 
     let mut holdings: Vec<Holding> = Vec::with_capacity(rows.len());
-    for (asset_id, symbol, name, type_code, acct_name, is_investment, qty, price, value) in rows {
-        // Owned-asset rows (is_investment=0) collapse to a single "owned" category — they
-        // don't have a drift target, so drift_pp falls through to 0.0 below.
-        let category = if is_investment == 0 { "owned".to_string() } else {
-            match type_code.as_str() {
+    for (asset_id, symbol, name, type_code, acct_name, role, qty, price, value) in rows {
+        // Non-investment-role rows collapse to their role name as the category — no
+        // drift target applies, so drift_pp falls through to 0.0 below.
+        let category = match role.as_str() {
+            "operating" => "operating".to_string(),
+            "property" => "property".to_string(),
+            _ => match type_code.as_str() {
                 "stock" => "stocks".into(),
                 "stable" => "stable_yielding".into(),
                 "crypto" | "nft" => "crypto".into(),
                 "fiat" => "cash".into(),
                 other => other.to_string(),
-            }
+            },
         };
         let pct = if total > 0.0 { value / total } else { 0.0 };
         let drift_pp = *drift_by_cat.get(&category).unwrap_or(&0.0);
@@ -640,7 +657,7 @@ async fn latest_as_of(pool: &SqlitePool) -> Result<String, AppError> {
     Ok(latest)
 }
 
-/// Sum value_usd grouped by investment category. Owned accounts (is_investment=0) are
+/// Sum value_usd grouped by investment category. Operating + property accounts are
 /// excluded — they contribute to net worth but never to drift/allocation math.
 async fn category_values(pool: &SqlitePool, as_of: &str) -> Result<HashMap<String, f64>, AppError> {
     let rows: Vec<(String, f64)> = sqlx::query_as(
@@ -648,7 +665,7 @@ async fn category_values(pool: &SqlitePool, as_of: &str) -> Result<HashMap<Strin
          FROM snapshots s
          JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE s.as_of = ?1 AND ac.is_investment = 1
+         WHERE s.as_of = ?1 AND ac.role = 'investment'
          GROUP BY a.type_code",
     ).bind(as_of).fetch_all(pool).await?;
     let mut out: HashMap<String, f64> = HashMap::new();

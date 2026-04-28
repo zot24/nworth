@@ -32,9 +32,36 @@
     </tbody>
 </table>
 
+{% if !operating.is_empty() %}
+<div class="section-eyebrow" style="margin-top: 2.5rem;">Operating ({{ operating.len() }})</div>
+<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Day-to-day cash you spend from rather than allocate. Counted in net worth, excluded from drift and allocation math.</p>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Institution</th>
+            <th class="r">Latest balance</th>
+            <th>As of</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for o in operating %}
+        <tr>
+            <td class="name"><a href="/accounts/{{ o.account.id }}" style="color: var(--text); text-decoration: underline;">{{ o.account.name }}</a></td>
+            <td class="label">{{ o.account.type_code }}</td>
+            <td class="label">{{ o.account.institution.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="r" style="font-variant-numeric: tabular-nums;">{% match o.latest_value_usd %}{% when Some with (v) %}${{ "{:.0}"|format(v) }}{% when None %}<span class="muted">—</span>{% endmatch %}</td>
+            <td class="label" style="font-size: 0.6875rem;">{{ o.latest_as_of.as_deref().unwrap_or("never") }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 {% if !owned_assets.is_empty() %}
-<div class="section-eyebrow" style="margin-top: 2.5rem;">Owned ({{ owned_assets.len() }})</div>
-<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Things of value held outside investment accounts — car, apartment, watches, art. Counted in net worth, excluded from drift and allocation math. Add new owned things in <a href="/data?tab=assets" style="color: var(--text); text-decoration: underline;">/data?tab=assets</a> (type <code>owned</code>) and update their values in <a href="/data?tab=snapshots" style="color: var(--text); text-decoration: underline;">/data?tab=snapshots</a>.</p>
+<div class="section-eyebrow" style="margin-top: 2.5rem;">Property ({{ owned_assets.len() }})</div>
+<p class="secondary" style="font-size: 0.75rem; margin-bottom: 1rem;">Physical things of value — car, apartment, watches, art. Counted in net worth, excluded from drift and allocation math. Add new property in <a href="/data?tab=assets" style="color: var(--text); text-decoration: underline;">/data?tab=assets</a> (type <code>owned</code>) and update their values in <a href="/data?tab=snapshots" style="color: var(--text); text-decoration: underline;">/data?tab=snapshots</a>.</p>
 <table>
     <thead>
         <tr>

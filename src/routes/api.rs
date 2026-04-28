@@ -33,7 +33,7 @@ pub struct AllocationSlice {
     pub symbol: String,
     pub type_code: String,
     pub value_usd: f64,
-    pub is_investment: i64,
+    pub role: String,
 }
 
 // ---------- Dashboard APIs ----------
@@ -91,15 +91,15 @@ pub async fn allocation(
         return Ok(Json(vec![]));
     }
 
-    // Group also by is_investment so the client can split owned-asset rows into a
-    // separate "Owned" category (a single symbol could in theory appear under both).
-    let rows: Vec<(String, String, i64, f64)> = sqlx::query_as(
-        "SELECT a.symbol, a.type_code, ac.is_investment, SUM(s.value_usd)
+    // Group also by role so the client can split rows into the right donut
+    // category (a single symbol could in theory appear under multiple roles).
+    let rows: Vec<(String, String, String, f64)> = sqlx::query_as(
+        "SELECT a.symbol, a.type_code, ac.role, SUM(s.value_usd)
          FROM snapshots s
          JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
          WHERE s.as_of = ?1
-         GROUP BY a.symbol, a.type_code, ac.is_investment
+         GROUP BY a.symbol, a.type_code, ac.role
          HAVING SUM(s.value_usd) > 0
          ORDER BY 4 DESC",
     )
@@ -109,11 +109,11 @@ pub async fn allocation(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(symbol, type_code, is_investment, value_usd)| AllocationSlice {
+            .map(|(symbol, type_code, role, value_usd)| AllocationSlice {
                 symbol,
                 type_code,
                 value_usd,
-                is_investment,
+                role,
             })
             .collect(),
     ))
@@ -437,16 +437,16 @@ pub struct CategoryPoint {
 
 /// GET /api/networth/by-category
 /// Maps type_code to display categories: stock→Stocks, stable→Stable Yielding, crypto/nft→Crypto, fiat→Cash.
-/// Owned-asset accounts (is_investment=0) collapse into their own "Owned" series.
+/// Operating-role accounts collapse into "Operating", property-role into "Property".
 pub async fn networth_by_category(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CategoryPoint>>, AppError> {
-    let rows: Vec<(String, String, i64, f64)> = sqlx::query_as(
-        "SELECT s.as_of, a.type_code, ac.is_investment, SUM(s.value_usd)
+    let rows: Vec<(String, String, String, f64)> = sqlx::query_as(
+        "SELECT s.as_of, a.type_code, ac.role, SUM(s.value_usd)
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         GROUP BY s.as_of, a.type_code, ac.is_investment
+         GROUP BY s.as_of, a.type_code, ac.role
          ORDER BY s.as_of",
     )
     .fetch_all(&state.pool)
@@ -454,17 +454,17 @@ pub async fn networth_by_category(
 
     let mut cat_map: std::collections::BTreeMap<(String, String), f64> =
         std::collections::BTreeMap::new();
-    for (as_of, type_code, is_investment, val) in rows {
-        let category = if is_investment == 0 {
-            "Owned".to_string()
-        } else {
-            match type_code.as_str() {
+    for (as_of, type_code, role, val) in rows {
+        let category = match role.as_str() {
+            "operating" => "Operating".to_string(),
+            "property" => "Property".to_string(),
+            _ => match type_code.as_str() {
                 "stock" => "Stocks".to_string(),
                 "stable" => "Stable Yielding".to_string(),
                 "crypto" | "nft" => "Crypto".to_string(),
                 "fiat" => "Cash".to_string(),
                 other => other.to_string(),
-            }
+            },
         };
         *cat_map.entry((as_of, category)).or_default() += val;
     }
@@ -764,14 +764,15 @@ pub async fn allocation_adjustments(
         return Ok(Json(vec![]));
     }
 
-    // Current value by category — investment accounts only. Owned assets (is_investment=0)
-    // aren't tradable, so they don't have allocation targets and shouldn't skew the denominator.
+    // Current value by category — investment-role accounts only. Operating + property
+    // roles aren't tradable, so they don't have allocation targets and shouldn't skew
+    // the denominator.
     let rows: Vec<(String, f64)> = sqlx::query_as(
         "SELECT a.type_code, SUM(s.value_usd) * 1.0
          FROM snapshots s
          JOIN assets a   ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE s.as_of = ?1 AND ac.is_investment = 1
+         WHERE s.as_of = ?1 AND ac.role = 'investment'
          GROUP BY a.type_code",
     )
     .bind(&latest)
@@ -962,8 +963,9 @@ pub async fn market_sentiment(
         ("crypto", "BTC", "crypto"),
     ];
 
-    // Portfolio momentum from snapshots. Owned assets (is_investment=0) have no market
-    // sentiment — exclude them so they don't pollute the per-category MA signal.
+    // Portfolio momentum from snapshots. Non-investment roles (operating + property)
+    // have no market sentiment — exclude them so they don't pollute the per-category
+    // MA signal.
     let snap_rows: Vec<(String, String, f64)> = sqlx::query_as(
         "SELECT
             CASE
@@ -978,7 +980,7 @@ pub async fn market_sentiment(
          FROM snapshots s
          JOIN assets a ON a.id = s.asset_id
          JOIN accounts ac ON ac.id = s.account_id
-         WHERE ac.is_investment = 1
+         WHERE ac.role = 'investment'
          GROUP BY category, s.as_of
          ORDER BY category, s.as_of",
     )

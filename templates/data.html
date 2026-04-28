@@ -278,14 +278,15 @@ function deletePosition(tr, label) {
             <div class="form-field"><label>Institution</label><input name="institution" style="width: 160px;"></div>
             <div class="form-field"><label>Chain</label><input name="chain_code" style="width: 100px;"></div>
             <div class="form-field"><label>Notes</label><input name="notes" style="width: 200px;"></div>
-            <div class="form-field" style="justify-content: flex-end;">
-                <label style="font-size: 0.6875rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 6px; text-transform: none; letter-spacing: 0;">
-                    <input name="is_investment" type="checkbox" value="1" checked style="margin: 0;">
-                    investment account
-                </label>
+            <div class="form-field"><label>Role <span class="neg" title="required">*</span></label>
+                <select name="role" required style="width: 130px;">
+                    <option value="investment">investment</option>
+                    <option value="operating">operating</option>
+                    <option value="property">property</option>
+                </select>
             </div>
         </div>
-        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Uncheck <em>investment account</em> for owned-but-not-investment things (car, house, art) — these count toward net worth but stay out of drift/allocation math. Smart delete: an empty account is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
+        <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. <em>Role</em>: <code>investment</code> participates in drift/allocation math; <code>operating</code> is day-to-day cash you don't strategically allocate (Citi, Chase); <code>property</code> is the container for physical things of value (Car, Apartment). All three count toward net worth. Smart delete: an empty account is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
         <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
     </form>
 </details>
@@ -305,7 +306,7 @@ function deletePosition(tr, label) {
             <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
             <td class="name">{{ a.name }}</td>
             <td class="label">{{ a.type_code }}</td>
-            <td class="label" style="font-size: 0.6875rem;">{% if a.is_investment == 1 %}investment{% else %}<span style="color: var(--info-ink);">owned</span>{% endif %}</td>
+            <td class="label" style="font-size: 0.6875rem;">{% if a.role == "investment" %}investment{% else %}<span style="color: var(--info-ink);">{{ a.role }}</span>{% endif %}</td>
             <td class="label">{{ a.institution }}</td>
             <td class="label">{{ a.chain_code }}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
@@ -326,9 +327,10 @@ function deletePosition(tr, label) {
                 </select>
             </td>
             <td>
-                <select name="is_investment" class="edit-select" title="Investment vs owned">
-                    <option value="1"{% if a.is_investment == 1 %} selected{% endif %}>investment</option>
-                    <option value="0"{% if a.is_investment == 0 %} selected{% endif %}>owned</option>
+                <select name="role" class="edit-select" title="Account role">
+                    <option value="investment"{% if a.role == "investment" %} selected{% endif %}>investment</option>
+                    <option value="operating"{% if a.role == "operating" %} selected{% endif %}>operating</option>
+                    <option value="property"{% if a.role == "property" %} selected{% endif %}>property</option>
                 </select>
             </td>
             <td><input name="institution" value="{{ a.institution }}" class="edit-input" style="width: 130px;"></td>

@@ -5,10 +5,8 @@ use axum::extract::{Path, State};
 use crate::{error::AppError, models::account::Account, AppState};
 
 /// One row per owned-type asset (Car, Apartment, Watch, …) — the "thing" itself,
-/// joined to whichever owned-account container it lives in via its most recent
-/// snapshot. This is what the Owned section of /accounts lists post-refactor:
-/// the assets are the conceptual unit ("a car is a thing of value"), and the
-/// container account is just the bucket they're grouped under.
+/// joined to whichever container account it lives in via its most recent
+/// snapshot. This is what the Property section of /accounts lists.
 pub struct OwnedAssetRow {
     pub asset_id: i64,
     pub asset_symbol: String,
@@ -19,17 +17,28 @@ pub struct OwnedAssetRow {
     pub latest_as_of: Option<String>,
 }
 
+/// One row per operating-role account, with its current cash balance summed
+/// from the latest snapshot. Operating accounts hold fiat/cash-like assets,
+/// not owned-type things, so we surface the rolled-up value rather than
+/// itemizing per asset.
+pub struct OperatingRow {
+    pub account: Account,
+    pub latest_value_usd: Option<f64>,
+    pub latest_as_of: Option<String>,
+}
+
 #[derive(Template)]
 #[template(path = "accounts.html")]
 struct AccountsTemplate {
     investments: Vec<Account>,
+    operating: Vec<OperatingRow>,
     owned_assets: Vec<OwnedAssetRow>,
     total_account_count: usize,
 }
 
 pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     let accounts = sqlx::query_as::<_, Account>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment
+        "SELECT id, name, type_code, institution, chain_code, active, notes, role
          FROM accounts
          WHERE active = 1
          ORDER BY type_code, name",
@@ -38,9 +47,38 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     .await?;
 
     let total_account_count = accounts.len();
-    let investments: Vec<Account> = accounts.into_iter()
-        .filter(|a| a.is_investment == 1)
-        .collect();
+    let mut investments: Vec<Account> = Vec::new();
+    let mut operating_accts: Vec<Account> = Vec::new();
+    for a in accounts {
+        match a.role.as_str() {
+            "investment" => investments.push(a),
+            "operating" => operating_accts.push(a),
+            _ => { /* property containers surface via owned_assets below */ }
+        }
+    }
+
+    // Operating: roll up the latest snapshot total per account so the section
+    // can show "Citi: $X (as of …)" without itemizing every fiat row.
+    let mut operating: Vec<OperatingRow> = Vec::with_capacity(operating_accts.len());
+    for account in operating_accts {
+        let latest: Option<(String, f64)> = sqlx::query_as(
+            "WITH last_date AS (
+                SELECT MAX(as_of) AS d FROM snapshots WHERE account_id = ?1
+            )
+            SELECT s.as_of, COALESCE(SUM(s.value_usd), 0.0)
+              FROM snapshots s, last_date
+             WHERE s.account_id = ?1 AND s.as_of = last_date.d
+             GROUP BY s.as_of",
+        )
+        .bind(account.id)
+        .fetch_optional(&state.pool)
+        .await?;
+        let (latest_as_of, latest_value_usd) = match latest {
+            Some((d, v)) => (Some(d), Some(v)),
+            None => (None, None),
+        };
+        operating.push(OperatingRow { account, latest_value_usd, latest_as_of });
+    }
 
     // Owned assets joined to the account on their latest snapshot. A LEFT JOIN
     // keeps newly-added assets without snapshots visible (account_name = None).
@@ -73,7 +111,7 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
         })
         .collect();
 
-    Ok(AccountsTemplate { investments, owned_assets, total_account_count })
+    Ok(AccountsTemplate { investments, operating, owned_assets, total_account_count })
 }
 
 #[derive(Debug)]
@@ -98,7 +136,7 @@ pub async fn detail(
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     let account = sqlx::query_as::<_, Account>(
-        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment
+        "SELECT id, name, type_code, institution, chain_code, active, notes, role
          FROM accounts WHERE id = ?1",
     )
     .bind(id)

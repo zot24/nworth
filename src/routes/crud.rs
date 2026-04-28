@@ -19,16 +19,16 @@ pub struct AccountForm {
     institution: Option<String>,
     chain_code: Option<String>,
     notes: Option<String>,
-    /// Checkbox value — present when checked ("on"/"true"/"1"), absent when unchecked.
-    is_investment: Option<String>,
+    /// 'investment' | 'operating' | 'property'. Defaults to 'investment' when
+    /// blank/unrecognized so the create form doesn't need every form to send it.
+    role: Option<String>,
 }
 
-fn investment_flag(raw: &Option<String>) -> i64 {
+fn role_or_default(raw: &Option<String>) -> &'static str {
     match raw.as_deref() {
-        // Unchecked checkbox = not present in form data → default true (investment).
-        // Explicit "0" / "false" → owned. Anything else (including "on") → investment.
-        Some("0") | Some("false") => 0,
-        _ => 1,
+        Some("operating") => "operating",
+        Some("property") => "property",
+        _ => "investment",
     }
 }
 
@@ -42,9 +42,9 @@ pub async fn create_account(
     State(state): State<AppState>,
     Form(f): Form<AccountForm>,
 ) -> Result<Redirect, AppError> {
-    let is_investment = investment_flag(&f.is_investment);
+    let role = role_or_default(&f.role);
     sqlx::query(
-        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes, is_investment)
+        "INSERT INTO accounts(name, type_code, institution, chain_code, active, notes, role)
          VALUES(?1, ?2, ?3, ?4, 1, ?5, ?6)",
     )
     .bind(&f.name)
@@ -52,7 +52,7 @@ pub async fn create_account(
     .bind(nullable(&f.institution))
     .bind(nullable(&f.chain_code))
     .bind(nullable(&f.notes))
-    .bind(is_investment)
+    .bind(role)
     .execute(&state.pool)
     .await?;
     Ok(Redirect::to("/data?tab=accounts"))
@@ -63,9 +63,9 @@ pub async fn update_account(
     Path(id): Path<i64>,
     Form(f): Form<AccountForm>,
 ) -> Result<Redirect, AppError> {
-    let is_investment = investment_flag(&f.is_investment);
+    let role = role_or_default(&f.role);
     sqlx::query(
-        "UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5, is_investment=?6
+        "UPDATE accounts SET name=?1, type_code=?2, institution=?3, chain_code=?4, notes=?5, role=?6
          WHERE id=?7",
     )
     .bind(&f.name)
@@ -73,7 +73,7 @@ pub async fn update_account(
     .bind(nullable(&f.institution))
     .bind(nullable(&f.chain_code))
     .bind(nullable(&f.notes))
-    .bind(is_investment)
+    .bind(role)
     .bind(id)
     .execute(&state.pool)
     .await?;

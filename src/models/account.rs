@@ -10,5 +10,7 @@ pub struct Account {
     pub chain_code: Option<String>,
     pub active: i64,
     pub notes: Option<String>,
-    pub is_investment: i64,
+    /// Three-way classification: 'investment' (counts in drift), 'operating'
+    /// (day-to-day cash, net-worth-only), 'property' (physical things, net-worth-only).
+    pub role: String,
 }

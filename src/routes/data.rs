@@ -53,7 +53,7 @@ pub struct AccountRow {
     pub chain_code: String,
     pub active: i64,
     pub notes: String,
-    pub is_investment: i64,
+    pub role: String,
 }
 
 #[derive(Debug)]
@@ -225,8 +225,8 @@ pub async fn index(
         .collect();
 
     // Accounts — all
-    let acct_rows: Vec<(i64, String, String, Option<String>, Option<String>, i64, Option<String>, i64)> = sqlx::query_as(
-        "SELECT id, name, type_code, institution, chain_code, active, notes, is_investment
+    let acct_rows: Vec<(i64, String, String, Option<String>, Option<String>, i64, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, name, type_code, institution, chain_code, active, notes, role
          FROM accounts ORDER BY active DESC, type_code, name",
     )
     .fetch_all(&state.pool)
@@ -234,13 +234,13 @@ pub async fn index(
 
     let accounts: Vec<AccountRow> = acct_rows
         .into_iter()
-        .map(|(id, name, type_code, institution, chain_code, active, notes, is_investment)| AccountRow {
+        .map(|(id, name, type_code, institution, chain_code, active, notes, role)| AccountRow {
             id, name, type_code,
             institution: institution.unwrap_or_default(),
             chain_code: chain_code.unwrap_or_default(),
             active,
             notes: notes.unwrap_or_default(),
-            is_investment,
+            role,
         })
         .collect();
 

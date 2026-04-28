@@ -7,13 +7,9 @@
 
 <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-top: 1rem; margin-bottom: 0.25rem;">
     <h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif;">
-        {{ account.name }} <span style="color: var(--text-muted); font-weight: 400;">({{ account.type_code }}{% if account.is_investment == 0 %} · owned{% endif %})</span>{% if let Some(inst) = account.institution.as_deref() %} <span style="font-family: 'Source Sans 3', sans-serif; font-size: 0.875rem; color: var(--text-secondary);">{{ inst }}</span>{% endif %}
+        {{ account.name }} <span style="color: var(--text-muted); font-weight: 400;">({{ account.type_code }}{% if account.role != "investment" %} · {{ account.role }}{% endif %})</span>{% if let Some(inst) = account.institution.as_deref() %} <span style="font-family: 'Source Sans 3', sans-serif; font-size: 0.875rem; color: var(--text-secondary);">{{ inst }}</span>{% endif %}
     </h1>
-    {% if account.is_investment == 0 %}
-    <a href="/accounts" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">update values in /accounts →</a>
-    {% else %}
     <a href="/data?tab=snapshots" style="font-size: 0.75rem; color: var(--text-secondary); text-decoration: underline;">edit in /data →</a>
-    {% endif %}
 </div>
 
 <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 400; color: var(--text); margin-top: 1.5rem;">
@@ -27,7 +23,7 @@
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
     <div class="chart-box">
-        <h3>{% if account.is_investment == 0 %}Value Over Time{% else %}Balance Over Time{% endif %}</h3>
+        <h3>{% if account.role == "investment" %}Balance Over Time{% else %}Value Over Time{% endif %}</h3>
         <canvas id="account-chart" height="150"></canvas>
     </div>
     <div class="chart-box">
@@ -41,7 +37,7 @@
 <table>
     <thead>
         <tr>
-            <th>{% if account.is_investment == 0 %}Thing{% else %}Symbol{% endif %}</th>
+            <th>{% if account.role == "property" %}Thing{% else %}Symbol{% endif %}</th>
             <th class="r">Quantity</th>
             <th class="r">Value</th>
             <th class="r">% of Account</th>

@@ -92,7 +92,8 @@ const CAT_COLORS = {
     'Stable Yielding': '#d97706',
     'Crypto': '#7c3aed',
     'Cash': '#059669',
-    'Owned': '#dc2626',
+    'Operating': '#0891b2',
+    'Property': '#dc2626',
 };
 
 function fmtMoney(n) {
@@ -122,12 +123,17 @@ function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
         heroDelta.innerHTML = `<span class="${cls}"><span class="arrow">${arrow(delta30.delta_usd)}</span>${fmtSigned(delta30.delta_usd)} ${delta30.delta_pct >= 0 ? '+' : ''}${delta30.delta_pct.toFixed(2)}%</span><span class="meta">last 30 days</span>`;
     }
 
-    // Tradable / owned split — only surface when there's owned value to break out
-    const ownedVal = summary.drift.owned_value || 0;
+    // Three-way breakdown (tradable / operating / property) — surface whichever
+    // non-tradable buckets exist so investment-only users see no extra noise.
     const tradableVal = summary.drift.tradable_value || 0;
-    if (ownedVal > 0) {
+    const operatingVal = summary.drift.operating_value || 0;
+    const propertyVal = summary.drift.property_value || 0;
+    if (operatingVal > 0 || propertyVal > 0) {
+        const parts = [`Tradable ${fmtMoney(tradableVal)}`];
+        if (operatingVal > 0) parts.push(`Operating ${fmtMoney(operatingVal)}`);
+        if (propertyVal > 0) parts.push(`Property ${fmtMoney(propertyVal)}`);
         const split = document.getElementById('hero-split');
-        split.textContent = `Tradable ${fmtMoney(tradableVal)} · Owned ${fmtMoney(ownedVal)}`;
+        split.textContent = parts.join(' · ');
         split.style.display = '';
     }
 
@@ -203,7 +209,8 @@ function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
     const alloc = await (await fetch('/api/allocation')).json();
     const catTotals = {};
     alloc.forEach(a => {
-        const cat = a.is_investment === 0 ? 'Owned'
+        const cat = a.role === 'operating' ? 'Operating'
+            : a.role === 'property' ? 'Property'
             : a.type_code === 'stock' ? 'Stocks'
             : a.type_code === 'stable' ? 'Stable Yielding'
             : (a.type_code === 'crypto' || a.type_code === 'nft') ? 'Crypto'
