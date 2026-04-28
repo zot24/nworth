@@ -308,6 +308,40 @@
         /* Color helpers tied to semantic tokens */
         .pos { color: var(--pos); }
         .neg { color: var(--neg); }
+
+        /* Confirm modal — replaces native window.confirm so destructive
+           prompts inherit the site's typography, palette, and dark-mode tokens. */
+        dialog.app-modal {
+            border: 1px solid var(--border-strong);
+            background: var(--bg);
+            color: var(--text);
+            border-radius: 6px;
+            padding: 1.25rem 1.5rem 1rem;
+            min-width: 320px;
+            max-width: 460px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+            font-family: 'Source Sans 3', sans-serif;
+        }
+        dialog.app-modal::backdrop {
+            background: rgba(0,0,0,0.45);
+            backdrop-filter: blur(2px);
+        }
+        .app-modal-message { font-size: 0.9375rem; line-height: 1.45; margin: 0 0 1.25rem; color: var(--text); white-space: pre-line; }
+        .app-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+        .app-modal-actions button {
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.8125rem;
+            padding: 6px 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: 1px solid var(--border-strong);
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.1s, opacity 0.1s;
+        }
+        .app-modal-actions button:hover { background: var(--bg-hover); }
+        .app-modal-actions .app-modal-confirm.destructive { background: var(--neg); border-color: var(--neg); color: #fff; }
+        .app-modal-actions .app-modal-confirm.destructive:hover { background: var(--neg); opacity: 0.88; }
     </style>
 </head>
 <body>
@@ -359,7 +393,7 @@
 
                 <span style="flex: 1;"></span>
 
-                <form method="POST" action="/snapshots/trigger" style="display:inline; margin-right: 8px;" onsubmit="return confirm('Create snapshot from current positions?')">
+                <form method="POST" action="/snapshots/trigger" style="display:inline; margin-right: 8px;" onsubmit="return confirmThenSubmit(this, 'Create snapshot from current positions?', {confirmLabel: 'Create', destructive: false})">
                     <a onclick="this.closest('form').submit()" style="font-size: 0.6875rem; color: var(--text-muted); cursor: pointer; text-decoration: none; border: 1px solid var(--border); padding: 3px 10px; border-radius: 3px;">snapshot</a>
                 </form>
                 <a href="/guide" style="font-size: 0.6875rem; color: var(--text-muted); margin-right: 8px;">Guide</a>
@@ -443,14 +477,7 @@
     }
 
     function deleteRow(action, label) {
-        if (confirm('Delete ' + label + '?')) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = action;
-            form.style.display = 'none';
-            document.body.appendChild(form);
-            form.submit();
-        }
+        confirmThenPost(action, 'Delete ' + label + '?');
     }
 
     // Theme
@@ -607,6 +634,69 @@
             }
         });
     });
+    </script>
+
+    <!-- App-styled confirm modal (replaces window.confirm).
+         Single global instance shared across pages. -->
+    <dialog id="app-confirm" class="app-modal">
+        <p class="app-modal-message"></p>
+        <div class="app-modal-actions">
+            <button type="button" class="app-modal-cancel">Cancel</button>
+            <button type="button" class="app-modal-confirm">OK</button>
+        </div>
+    </dialog>
+
+    <script>
+    /**
+     * Promise-based confirm dialog matching the site's design tokens.
+     * Resolves true on confirm, false on cancel/ESC/backdrop.
+     */
+    function appConfirm(message, { confirmLabel = 'Delete', destructive = true } = {}) {
+        return new Promise(resolve => {
+            const dlg = document.getElementById('app-confirm');
+            dlg.querySelector('.app-modal-message').textContent = message;
+            const confirmBtn = dlg.querySelector('.app-modal-confirm');
+            const cancelBtn = dlg.querySelector('.app-modal-cancel');
+            confirmBtn.textContent = confirmLabel;
+            confirmBtn.classList.toggle('destructive', destructive);
+            const close = (val) => {
+                confirmBtn.removeEventListener('click', onYes);
+                cancelBtn.removeEventListener('click', onNo);
+                dlg.removeEventListener('cancel', onNo);
+                dlg.removeEventListener('click', onBackdrop);
+                if (dlg.open) dlg.close();
+                resolve(val);
+            };
+            const onYes = () => close(true);
+            const onNo  = (e) => { if (e) e.preventDefault(); close(false); };
+            // Click outside the dialog frame (on the backdrop area) cancels.
+            const onBackdrop = (e) => { if (e.target === dlg) close(false); };
+            confirmBtn.addEventListener('click', onYes);
+            cancelBtn.addEventListener('click', onNo);
+            dlg.addEventListener('cancel', onNo);
+            dlg.addEventListener('click', onBackdrop);
+            dlg.showModal();
+            confirmBtn.focus();
+        });
+    }
+
+    /** Used in inline `onsubmit` handlers — returns false to suppress the
+        immediate native submission, then re-submits the form on confirm. */
+    function confirmThenSubmit(form, message, opts) {
+        appConfirm(message, opts).then(ok => { if (ok) form.submit(); });
+        return false;
+    }
+
+    /** Build-and-submit a one-off POST form after confirmation. Replaces the
+        long inline `if(confirm(...)){const f=...;f.submit()}` pattern. */
+    function confirmThenPost(action, message, opts) {
+        appConfirm(message, opts).then(ok => {
+            if (!ok) return;
+            const f = document.createElement('form');
+            f.method = 'POST'; f.action = action; f.style.display = 'none';
+            document.body.appendChild(f); f.submit();
+        });
+    }
     </script>
 </body>
 </html>

@@ -122,7 +122,7 @@
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td style="white-space: nowrap;">
                 <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="if(confirm('Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/assets/{{ a.id }}/delete?redirect=/data?tab=assets';document.body.appendChild(f);f.submit()}" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                <button class="row-action del" onclick="confirmThenPost('/assets/{{ a.id }}/delete?redirect=/data?tab=assets', 'Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -187,7 +187,7 @@
             <td class="r" style="font-weight: 500;">${{ "{:.2}"|format(s.value_usd) }}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ s.source }}</td>
             <td class="actions">
-                <form method="POST" action="/snapshots/{{ s.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this snapshot row?')">
+                <form method="POST" action="/snapshots/{{ s.id }}/delete" style="display:inline;" onsubmit="return confirmThenSubmit(this, 'Delete this snapshot row?')">
                     <a class="del" onclick="this.closest('form').submit()">delete</a>
                 </form>
             </td>
@@ -255,13 +255,8 @@ function savePosition(tr) {
     f.submit();
 }
 function deletePosition(tr, label) {
-    if (!confirm('Delete position ' + label + '?')) return;
-    const f = document.createElement('form');
-    f.method = 'POST';
-    f.action = `/positions/${tr.dataset.acct}/${tr.dataset.asset}/delete?redirect=/data?tab=positions`;
-    f.style.display = 'none';
-    document.body.appendChild(f);
-    f.submit();
+    const action = `/positions/${tr.dataset.acct}/${tr.dataset.asset}/delete?redirect=/data?tab=positions`;
+    confirmThenPost(action, 'Delete position ' + label + '?');
 }
 </script>
 
@@ -342,7 +337,7 @@ function deletePosition(tr, label) {
             <td><input name="notes" value="{{ a.notes }}" class="edit-input" style="width: 180px;"></td>
             <td style="white-space: nowrap;">
                 <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="if(confirm('Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')){const f=document.createElement('form');f.method='POST';f.action='/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts';document.body.appendChild(f);f.submit()}" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                <button class="row-action del" onclick="confirmThenPost('/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts', 'Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -386,7 +381,7 @@ function deletePosition(tr, label) {
             <td class="r">{% if i.taxes_usd > 0.0 %}${{ "{:.2}"|format(i.taxes_usd) }}{% endif %}</td>
             <td class="label">{{ i.company }}</td>
             <td class="actions">
-                <a class="del" onclick="if(confirm('Delete this income record?')){const f=document.createElement('form');f.method='POST';f.action='/income/{{ i.id }}/delete';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+                <a class="del" onclick="confirmThenPost('/income/{{ i.id }}/delete', 'Delete this income record?')" style="cursor:pointer;">delete</a>
             </td>
         </tr>
         {% endfor %}
@@ -441,7 +436,7 @@ function deletePosition(tr, label) {
             <td class="label">{{ e.category_name }}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ e.labels_display }}</td>
             <td class="actions">
-                <a class="del" onclick="if(confirm('Delete this expense record?')){const f=document.createElement('form');f.method='POST';f.action='/expenses/{{ e.id }}/delete?redirect=/data?tab=expenses';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+                <a class="del" onclick="confirmThenPost('/expenses/{{ e.id }}/delete?redirect=/data?tab=expenses', 'Delete this expense record?')" style="cursor:pointer;">delete</a>
             </td>
         </tr>
         {% endfor %}
@@ -547,7 +542,7 @@ function saveTarget(btn) {
             <td>{% if c.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td class="actions">
                 {% if c.active == 1 %}
-                <a class="del" onclick="if(confirm('Delete category {{ c.name }}?')){const f=document.createElement('form');f.method='POST';f.action='/categories/{{ c.id }}/delete';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+                <a class="del" onclick="confirmThenPost('/categories/{{ c.id }}/delete', 'Delete category {{ c.name }}?')" style="cursor:pointer;">delete</a>
                 {% endif %}
             </td>
         </tr>
@@ -589,7 +584,7 @@ function saveTarget(btn) {
             <td>{% if l.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td class="actions">
                 {% if l.active == 1 %}
-                <a class="del" onclick="if(confirm('Delete label {{ l.name }}?')){const f=document.createElement('form');f.method='POST';f.action='/labels/{{ l.id }}/delete';document.body.appendChild(f);f.submit()}" style="cursor:pointer;">delete</a>
+                <a class="del" onclick="confirmThenPost('/labels/{{ l.id }}/delete', 'Delete label {{ l.name }}?')" style="cursor:pointer;">delete</a>
                 {% endif %}
             </td>
         </tr>
