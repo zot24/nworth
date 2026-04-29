@@ -310,6 +310,13 @@
         .pos { color: var(--pos); }
         .neg { color: var(--neg); }
 
+        /* Autosave row-flash — brief pulse so users see a change registered. */
+        @keyframes autosave-flash {
+            0%   { background-color: color-mix(in srgb, var(--pos) 25%, transparent); }
+            100% { background-color: transparent; }
+        }
+        tr.autosaved > td { animation: autosave-flash 0.7s ease-out; }
+
         /* Confirm modal — replaces native window.confirm so destructive
            prompts inherit the site's typography, palette, and dark-mode tokens. */
         dialog.app-modal {
@@ -459,53 +466,46 @@
             btn.classList.toggle('unlocked', editing);
             btn.innerHTML = editing ? ICON_UNLOCK : ICON_LOCK;
         });
-        // Optional companion "Save all" button is shown only while editing.
-        const saveAllBtn = document.getElementById('save-all-btn');
-        if (saveAllBtn) saveAllBtn.style.display = editing ? '' : 'none';
     }
 
     /**
-     * Bulk-save every visible edit-row by POSTing each one's inputs to its
-     * data-action URL. Sequential fire-and-fetch (so server-side redirects
-     * are absorbed), then we reload to render the saved state. Replaces
-     * having to click the per-row check on every line.
+     * Autosave: any change to an input/select/textarea inside a row marked
+     * `tr.edit-row[data-action]` (or `tr[data-autosave]`) immediately POSTs
+     * the row's named fields to its action URL. No per-row save click, no
+     * bulk save click — change a field, it saves.
+     *
+     * Wired via document-level event delegation so newly rendered rows
+     * (after a reload, after a redirect) automatically pick up the
+     * behavior without re-binding per page.
      */
-    async function saveAllRows(redirectTo) {
-        const rows = Array.from(document.querySelectorAll('tr.edit-row[data-action]'));
-        for (const tr of rows) {
-            const data = new URLSearchParams();
-            tr.querySelectorAll('input, select, textarea').forEach(el => {
-                if (el.disabled || !el.name) return;
-                if (el.type === 'checkbox' && !el.checked) return;
-                data.append(el.name, el.value);
-            });
-            try {
-                await fetch(tr.dataset.action, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: data.toString(),
-                    redirect: 'manual',
-                });
-            } catch (e) { console.error('save-all row failed', e); }
-        }
-        window.location.assign(redirectTo || window.location.pathname + window.location.search);
-    }
+    document.addEventListener('change', e => {
+        const tr = e.target.closest('tr.edit-row[data-action], tr[data-autosave]');
+        if (!tr) return;
+        if (!e.target.matches('input, select, textarea')) return;
+        if (e.target.disabled) return;
+        autosaveRow(tr);
+    });
 
-    // Submit a row's inputs as a form POST
-    function submitRow(tr, action) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = action;
-        form.style.display = 'none';
+    async function autosaveRow(tr) {
+        const action = tr.dataset.action || tr.dataset.autosave;
+        if (!action) return;
+        const data = new URLSearchParams();
         tr.querySelectorAll('input, select, textarea').forEach(el => {
-            const hidden = document.createElement('input');
-            hidden.type = 'hidden';
-            hidden.name = el.name;
-            hidden.value = el.value;
-            form.appendChild(hidden);
+            if (el.disabled || !el.name) return;
+            if (el.type === 'checkbox' && !el.checked) return;
+            data.append(el.name, el.value);
         });
-        document.body.appendChild(form);
-        form.submit();
+        try {
+            await fetch(action, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: data.toString(),
+                redirect: 'manual',
+            });
+            // Brief pulse so the user knows something happened.
+            tr.classList.add('autosaved');
+            setTimeout(() => tr.classList.remove('autosaved'), 700);
+        } catch (e) { console.error('autosave failed', e); }
     }
 
     function deleteRow(action, label) {

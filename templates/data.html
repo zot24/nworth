@@ -122,14 +122,7 @@ document.addEventListener('click', e => {
             <th>ID</th><th>Symbol</th><th>Name</th><th>Type</th><th>Chain</th>
             <th>Risk</th><th>CoinGecko</th><th>Yahoo</th>
             <th>Active</th>
-            <th style="width: 40px; white-space: nowrap;">
-                <button class="lock-toggle" onclick="toggleLock()" title="Edit">
-                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                </button>
-                <button class="row-action" onclick="saveAllRows('/data?tab=assets')" title="Save all changed rows" style="display: none;" id="save-all-btn">
-                    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-            </th>
+            <th style="width: 40px;"><button class="lock-toggle" onclick="toggleLock()" title="Edit"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></button></th>
         </tr>
     </thead>
     <tbody>
@@ -173,8 +166,7 @@ document.addEventListener('click', e => {
             <td><input name="yahoo_ticker" value="{{ a.yahoo_ticker }}" class="edit-input" style="width: 70px; font-size: 0.75rem;"></td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td style="white-space: nowrap;">
-                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="confirmThenPost('/assets/{{ a.id }}/delete?redirect=/data?tab=assets', 'Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+<button class="row-action del" onclick="confirmThenPost('/assets/{{ a.id }}/delete?redirect=/data?tab=assets', 'Delete {{ a.symbol }}?\n\nIf this asset has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -327,19 +319,21 @@ function toggleAssetMode(sel) {
     </thead>
     <tbody>
         {% for p in positions %}
-        <tr data-acct="{{ p.account_id }}" data-asset="{{ p.asset_id }}">
+        <tr data-autosave="/positions/upsert" data-acct="{{ p.account_id }}" data-asset="{{ p.asset_id }}">
             <td class="name">{{ p.account_name }}</td>
             <td style="font-family: 'IBM Plex Mono', monospace;">{{ p.asset_symbol }}</td>
             <td class="r">
-                <input class="edit-input pos-qty" type="number" step="0.0001" value="{{ "{:.4}"|format(p.quantity) }}" style="width: 100px; text-align: right;">
+                <input name="quantity" class="edit-input" type="number" step="0.0001" value="{{ "{:.4}"|format(p.quantity) }}" style="width: 100px; text-align: right;">
             </td>
             <td class="r">
-                <input class="edit-input pos-cost" type="number" step="0.01" value="{{ "{:.2}"|format(p.avg_cost) }}" style="width: 90px; text-align: right;">
+                <input name="avg_cost" class="edit-input" type="number" step="0.01" value="{{ "{:.2}"|format(p.avg_cost) }}" style="width: 90px; text-align: right;">
             </td>
             <td class="r muted">${{ "{:.2}"|format(p.last_price) }}</td>
             <td class="r" style="font-weight: 500;">${{ "{:.2}"|format(p.value_usd) }}</td>
             <td class="actions" style="white-space: nowrap;">
-                <button class="row-action" type="button" onclick="savePosition(this.closest('tr'))" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <input type="hidden" name="account_id" value="{{ p.account_id }}">
+                <input type="hidden" name="asset_id" value="{{ p.asset_id }}">
+                <input type="hidden" name="redirect" value="/data?tab=positions">
                 <button class="row-action del" type="button" onclick="deletePosition(this.closest('tr'), '{{ p.asset_symbol }}')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
@@ -349,24 +343,9 @@ function toggleAssetMode(sel) {
 </div>
 
 <script>
-function savePosition(tr) {
-    const f = document.createElement('form');
-    f.method = 'POST'; f.action = '/positions/upsert'; f.style.display = 'none';
-    const fields = {
-        account_id: tr.dataset.acct,
-        asset_id: tr.dataset.asset,
-        quantity: tr.querySelector('.pos-qty').value,
-        avg_cost: tr.querySelector('.pos-cost').value,
-        redirect: '/data?tab=positions',
-    };
-    Object.entries(fields).forEach(([k, v]) => {
-        const i = document.createElement('input');
-        i.type = 'hidden'; i.name = k; i.value = v;
-        f.appendChild(i);
-    });
-    document.body.appendChild(f);
-    f.submit();
-}
+// Position rows now autosave on change via the global delegation in
+// base.html (data-autosave="/positions/upsert" + named inputs); the
+// explicit savePosition function is gone.
 function deletePosition(tr, label) {
     const action = `/positions/${tr.dataset.acct}/${tr.dataset.asset}/delete?redirect=/data?tab=positions`;
     confirmThenPost(action, 'Delete position ' + label + '?');
@@ -454,8 +433,7 @@ function deletePosition(tr, label) {
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td><input name="notes" value="{{ a.notes }}" class="edit-input" style="width: 180px;"></td>
             <td style="white-space: nowrap;">
-                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="confirmThenPost('/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts', 'Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+<button class="row-action del" onclick="confirmThenPost('/accounts/{{ a.id }}/delete?redirect=/data?tab=accounts', 'Delete {{ a.name }}?\n\nIf this account has no snapshots/positions/transactions it will be permanently removed. Otherwise it will just be marked inactive.')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -517,8 +495,7 @@ function deletePosition(tr, label) {
             <td class="r"><input name="taxes_usd" type="number" step="0.01" value="{% if i.taxes_usd > 0.0 %}{{ "{:.2}"|format(i.taxes_usd) }}{% endif %}" class="edit-input" style="width: 90px; text-align: right;"></td>
             <td><input name="company" value="{{ i.company }}" class="edit-input" style="width: 130px;"></td>
             <td style="white-space: nowrap;">
-                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="confirmThenPost('/income/{{ i.id }}/delete', 'Delete this income record?')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+<button class="row-action del" onclick="confirmThenPost('/income/{{ i.id }}/delete', 'Delete this income record?')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
@@ -597,8 +574,7 @@ function deletePosition(tr, label) {
             <td><input name="label_ids" value="{{ e.label_ids_csv }}" class="edit-input" style="width: 90px;" placeholder="1,2"></td>
             <td style="white-space: nowrap;">
                 <input type="hidden" name="redirect" value="/data?tab=expenses">
-                <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="row-action del" onclick="confirmThenPost('/expenses/{{ e.id }}/delete?redirect=/data?tab=expenses', 'Delete this expense record?')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+<button class="row-action del" onclick="confirmThenPost('/expenses/{{ e.id }}/delete?redirect=/data?tab=expenses', 'Delete this expense record?')" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </td>
         </tr>
         {% endfor %}
