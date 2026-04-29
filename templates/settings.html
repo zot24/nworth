@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Portfolio{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.5rem; font-weight: 400; font-family: 'Libre Baskerville', serif; margin-bottom: 0.5rem;">Settings</h1>
+<p class="secondary" style="font-size: 0.8125rem; margin-bottom: 2rem;">App-level preferences. Stored as key/value rows in the <code>settings</code> table; also reachable via <a href="/api/docs" style="color: var(--text); text-decoration: underline;">/api/v1/settings</a>.</p>
+
+<form method="POST" action="/settings" style="max-width: 480px;">
+    <div class="form-row">
+        <div class="form-field">
+            <label>Display currency</label>
+            <select name="display_currency" style="width: 240px;">
+                {% for opt in currency_options %}
+                <option value="{{ opt.code }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Currently <strong>{{ display_currency }}</strong>. The setting is stored, and exposed via the API. Wiring it through every <code>$X</code> on the dashboard is a follow-up — values still render in USD until the conversion pass lands.</p>
+    <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a></div>
+</form>
+{% endblock %}

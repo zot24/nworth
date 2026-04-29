@@ -609,3 +609,36 @@ pub async fn trigger_snapshot_json(State(s): State<AppState>) -> Result<Json<Tri
     ).bind(&anchor).execute(&s.pool).await?;
     Ok(Json(TriggerResult { date: anchor, snapshots_created: result.rows_affected() }))
 }
+
+// ────────── Settings (key/value) ──────────
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct SettingOut {
+    pub key: String,
+    pub value: String,
+    pub updated_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct SettingIn {
+    pub value: String,
+}
+
+pub async fn list_settings(State(s): State<AppState>) -> Result<Json<Vec<SettingOut>>, AppError> {
+    let rows = sqlx::query_as::<_, SettingOut>(
+        "SELECT key, value, updated_at FROM settings ORDER BY key",
+    ).fetch_all(&s.pool).await?;
+    Ok(Json(rows))
+}
+
+pub async fn update_setting_json(
+    State(s): State<AppState>,
+    Path(key): Path<String>,
+    Json(body): Json<SettingIn>,
+) -> Result<Json<SettingOut>, AppError> {
+    crate::routes::settings::set_setting(&s.pool, &key, &body.value).await?;
+    let row = sqlx::query_as::<_, SettingOut>(
+        "SELECT key, value, updated_at FROM settings WHERE key = ?1",
+    ).bind(&key).fetch_one(&s.pool).await?;
+    Ok(Json(row))
+}

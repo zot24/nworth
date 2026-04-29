@@ -121,6 +121,11 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/categories/:id", put(routes::rest::update_category_json).delete(routes::rest::delete_category_json))
         .route("/api/v1/labels", get(routes::rest::list_labels).post(routes::rest::create_label_json))
         .route("/api/v1/labels/:id", put(routes::rest::update_label_json).delete(routes::rest::delete_label_json))
+        // Settings (HTML + REST)
+        .route("/settings", get(routes::settings::index))
+        .route("/settings", post(routes::settings::save))
+        .route("/api/v1/settings", get(routes::rest::list_settings))
+        .route("/api/v1/settings/:key", put(routes::rest::update_setting_json))
         // Docs
         .route("/guide", get(routes::guide::index))
         .route("/api/docs", get(routes::docs::swagger_ui))

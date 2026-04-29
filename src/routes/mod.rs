@@ -15,5 +15,6 @@ pub mod insights;
 pub mod positions;
 pub mod stocks;
 pub mod rest;
+pub mod settings;
 pub mod targets;
 pub mod wealth;
