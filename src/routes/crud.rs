@@ -377,16 +377,19 @@ pub async fn delete_snapshot(
     Ok(Redirect::to("/"))
 }
 
-/// POST /snapshots/trigger — creates snapshots for today from all positions with cached prices.
+/// POST /snapshots/trigger — creates the current month's snapshots from
+/// every position joined with its asset's last_price. Anchored to first-of-
+/// month to match the pricefeed cadence.
 pub async fn trigger_snapshots(
     State(state): State<AppState>,
 ) -> Result<Redirect, AppError> {
-    let today = Utc::now().format("%Y-%m-%d").to_string();
+    let anchor = Utc::now().format("%Y-%m-01").to_string();
     sqlx::query(
         "INSERT INTO snapshots(as_of, account_id, asset_id, quantity, price_usd, value_usd, source)
-         SELECT ?1, p.account_id, p.asset_id, p.quantity, p.last_price,
-                p.quantity * COALESCE(p.last_price, 0), 'manual'
+         SELECT ?1, p.account_id, p.asset_id, p.quantity, a.last_price,
+                p.quantity * COALESCE(a.last_price, 0), 'manual'
          FROM positions p
+         JOIN assets a ON a.id = p.asset_id
          WHERE p.quantity > 0
          ON CONFLICT(as_of, account_id, asset_id) DO UPDATE SET
            quantity  = excluded.quantity,
@@ -394,7 +397,7 @@ pub async fn trigger_snapshots(
            value_usd = excluded.value_usd,
            source    = excluded.source",
     )
-    .bind(&today)
+    .bind(&anchor)
     .execute(&state.pool)
     .await?;
     Ok(Redirect::to("/"))
@@ -511,8 +514,8 @@ pub async fn upsert_position_form(
 ) -> Result<Redirect, AppError> {
     let today = Utc::now().format("%Y-%m-%d").to_string();
     sqlx::query(
-        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, last_price, value_usd, as_of)
-         VALUES(?1, ?2, ?3, ?4, 0, 0, ?5)
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, as_of)
+         VALUES(?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(account_id, asset_id) DO UPDATE SET
            quantity = excluded.quantity,
            avg_cost = COALESCE(excluded.avg_cost, positions.avg_cost),
@@ -593,8 +596,8 @@ pub async fn track_holding(
     };
 
     sqlx::query(
-        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, last_price, value_usd, as_of)
-         VALUES(?1, ?2, ?3, ?4, 0, 0, ?5)
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, as_of)
+         VALUES(?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(account_id, asset_id) DO UPDATE SET
            quantity = excluded.quantity,
            avg_cost = COALESCE(excluded.avg_cost, positions.avg_cost),

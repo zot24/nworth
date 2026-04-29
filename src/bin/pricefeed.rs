@@ -123,11 +123,11 @@ async fn run_cycle(pool: &SqlitePool, cg_key: Option<&str>) -> Result<()> {
         Err(e) => tracing::warn!("FX fetch failed: {e:#}"),
     }
 
-    // --- 4. Update positions with latest prices ---
-    // positions.last_price + value_usd are kept live on every cycle so any
-    // page-level "live valuation" computation reads fresh numbers without
-    // needing a fresh snapshot row.
-    update_positions(pool).await?;
+    // --- 4. Update assets.last_price from latest price_history per asset ---
+    // One row written per asset (not per position), so BTC at Robinhood +
+    // Gemini + Ledger results in one update, not three. Read paths join
+    // positions × assets to compute live values on demand.
+    update_asset_prices(pool).await?;
 
     // --- 5. Create / update the *current month's* snapshot ---
     // The snapshot's as_of is anchored to the first day of the current month,
@@ -143,56 +143,54 @@ async fn run_cycle(pool: &SqlitePool, cg_key: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Updates the positions table with latest cached prices from price_history.
-async fn update_positions(pool: &SqlitePool) -> Result<()> {
+/// Refreshes assets.last_price + assets.last_price_as_of from the most recent
+/// price_history row per asset. One row updated per asset, not per position.
+async fn update_asset_prices(pool: &SqlitePool) -> Result<()> {
     let updated = sqlx::query(
-        "UPDATE positions SET
+        "UPDATE assets SET
             last_price = (
                 SELECT ph.price_usd FROM price_history ph
-                WHERE ph.asset_id = positions.asset_id
+                WHERE ph.asset_id = assets.id
                 ORDER BY ph.as_of DESC LIMIT 1
             ),
-            value_usd = positions.quantity * COALESCE((
-                SELECT ph.price_usd FROM price_history ph
-                WHERE ph.asset_id = positions.asset_id
-                ORDER BY ph.as_of DESC LIMIT 1
-            ), 0),
-            as_of = (
+            last_price_as_of = (
                 SELECT ph.as_of FROM price_history ph
-                WHERE ph.asset_id = positions.asset_id
+                WHERE ph.asset_id = assets.id
                 ORDER BY ph.as_of DESC LIMIT 1
             )
         WHERE EXISTS (
             SELECT 1 FROM price_history ph
-            WHERE ph.asset_id = positions.asset_id
+            WHERE ph.asset_id = assets.id
         )",
     )
     .execute(pool)
     .await?;
 
-    tracing::info!("updated {} positions with latest prices", updated.rows_affected());
+    tracing::info!("updated {} asset prices from price_history", updated.rows_affected());
     Ok(())
 }
 
-/// Creates snapshot rows from current positions × latest prices.
-/// One snapshot per (account, asset) with today's date.
-async fn create_snapshots(pool: &SqlitePool, today: &str) -> Result<()> {
+/// Creates / updates the current month's snapshot rows by joining positions
+/// to assets to read each asset's live last_price. value_usd is computed at
+/// write time as quantity × last_price.
+async fn create_snapshots(pool: &SqlitePool, anchor: &str) -> Result<()> {
     let inserted = sqlx::query(
         "INSERT INTO snapshots(as_of, account_id, asset_id, quantity, price_usd, value_usd, source)
-         SELECT ?1, p.account_id, p.asset_id, p.quantity, p.last_price,
-                p.quantity * COALESCE(p.last_price, 0), 'pricefeed'
+         SELECT ?1, p.account_id, p.asset_id, p.quantity, a.last_price,
+                p.quantity * COALESCE(a.last_price, 0), 'pricefeed'
          FROM positions p
-         WHERE p.last_price > 0
+         JOIN assets a ON a.id = p.asset_id
+         WHERE a.last_price > 0
          ON CONFLICT(as_of, account_id, asset_id) DO UPDATE SET
            quantity  = excluded.quantity,
            price_usd = excluded.price_usd,
            value_usd = excluded.value_usd,
            source    = excluded.source",
     )
-    .bind(today)
+    .bind(anchor)
     .execute(pool)
     .await?;
 
-    tracing::info!("created/updated {} snapshots for {}", inserted.rows_affected(), today);
+    tracing::info!("created/updated {} snapshots for {}", inserted.rows_affected(), anchor);
     Ok(())
 }

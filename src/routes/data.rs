@@ -208,11 +208,12 @@ pub async fn index(
     let pos_rows: Vec<(String, String, i64, i64, f64, f64, f64, f64)> = sqlx::query_as(
         "SELECT ac.name, a.symbol, p.account_id, p.asset_id,
                 p.quantity * 1.0, COALESCE(p.avg_cost * 1.0, 0.0),
-                COALESCE(p.last_price * 1.0, 0.0), p.value_usd * 1.0
+                COALESCE(a.last_price * 1.0, 0.0),
+                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd
          FROM positions p
          JOIN accounts ac ON ac.id = p.account_id
          JOIN assets a ON a.id = p.asset_id
-         ORDER BY p.value_usd DESC",
+         ORDER BY value_usd DESC",
     )
     .fetch_all(&state.pool)
     .await?;

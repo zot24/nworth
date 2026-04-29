@@ -56,12 +56,12 @@ pub async fn index(State(state): State<AppState>) -> Result<impl IntoResponse, A
     let positions: Vec<StockPosition> = sqlx::query_as(
         "SELECT a.symbol, ac.name AS account_name,
                 p.quantity, COALESCE(p.avg_cost, 0) AS avg_cost,
-                p.value_usd
+                p.quantity * COALESCE(a.last_price, 0) AS value_usd
          FROM positions p
          JOIN accounts ac ON ac.id = p.account_id
          JOIN assets a ON a.id = p.asset_id
          WHERE a.type_code = 'stock' AND a.symbol != 'STOCKS_TOTAL'
-         ORDER BY p.value_usd DESC",
+         ORDER BY value_usd DESC",
     )
     .fetch_all(&state.pool)
     .await?;

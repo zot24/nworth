@@ -171,7 +171,7 @@ async fn asset_with_positions_is_soft_deleted() {
         .execute(&state.pool).await.unwrap();
     sqlx::query("INSERT INTO assets(symbol, type_code, active) VALUES('VOO','stock',1)")
         .execute(&state.pool).await.unwrap();
-    sqlx::query("INSERT INTO positions(account_id, asset_id, quantity, value_usd, as_of) VALUES(1,1,10.0,5000,'2026-01-01')")
+    sqlx::query("INSERT INTO positions(account_id, asset_id, quantity, as_of) VALUES(1,1,10.0,'2026-01-01')")
         .execute(&state.pool).await.unwrap();
     let app = build_app(state);
 
@@ -374,9 +374,9 @@ async fn snapshot_trigger_creates_from_positions() {
     let state = test_state().await;
     sqlx::query("INSERT INTO accounts(name,type_code,active) VALUES('Broker','broker',1)")
         .execute(&state.pool).await.unwrap();
-    sqlx::query("INSERT INTO assets(symbol,type_code,active) VALUES('VOO','stock',1)")
+    sqlx::query("INSERT INTO assets(symbol,type_code,active,last_price) VALUES('VOO','stock',1,510)")
         .execute(&state.pool).await.unwrap();
-    sqlx::query("INSERT INTO positions(account_id,asset_id,quantity,avg_cost,last_price,value_usd,as_of) VALUES(1,1,100,500,510,51000,'2026-04-01')")
+    sqlx::query("INSERT INTO positions(account_id,asset_id,quantity,avg_cost,as_of) VALUES(1,1,100,500,'2026-04-01')")
         .execute(&state.pool).await.unwrap();
 
     let app = build_app(state);

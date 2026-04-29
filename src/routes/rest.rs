@@ -251,13 +251,18 @@ pub struct PositionIn {
     pub asset_id: i64,
     pub quantity: f64,
     pub avg_cost: Option<f64>,
-    pub last_price: Option<f64>,
-    pub value_usd: f64,
 }
 
 pub async fn list_positions(State(s): State<AppState>) -> Result<Json<Vec<PositionOut>>, AppError> {
+    // last_price + value_usd are derived live by joining assets.
     let rows = sqlx::query_as::<_, PositionOut>(
-        "SELECT account_id, asset_id, quantity * 1.0 as quantity, avg_cost, last_price, value_usd * 1.0 as value_usd, as_of FROM positions ORDER BY value_usd DESC",
+        "SELECT p.account_id, p.asset_id, p.quantity * 1.0 as quantity, p.avg_cost,
+                a.last_price as last_price,
+                p.quantity * COALESCE(a.last_price, 0) as value_usd,
+                p.as_of
+         FROM positions p
+         JOIN assets a ON a.id = p.asset_id
+         ORDER BY value_usd DESC",
     ).fetch_all(&s.pool).await?;
     Ok(Json(rows))
 }
@@ -265,12 +270,18 @@ pub async fn list_positions(State(s): State<AppState>) -> Result<Json<Vec<Positi
 pub async fn upsert_position(State(s): State<AppState>, Json(body): Json<PositionIn>) -> Result<(StatusCode, Json<PositionOut>), AppError> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     sqlx::query(
-        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, last_price, value_usd, as_of) VALUES(?1,?2,?3,?4,?5,?6,?7)
-         ON CONFLICT(account_id, asset_id) DO UPDATE SET quantity=excluded.quantity, avg_cost=excluded.avg_cost, last_price=excluded.last_price, value_usd=excluded.value_usd, as_of=excluded.as_of",
-    ).bind(body.account_id).bind(body.asset_id).bind(body.quantity).bind(body.avg_cost).bind(body.last_price).bind(body.value_usd).bind(&today)
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, as_of) VALUES(?1,?2,?3,?4,?5)
+         ON CONFLICT(account_id, asset_id) DO UPDATE SET quantity=excluded.quantity, avg_cost=excluded.avg_cost, as_of=excluded.as_of",
+    ).bind(body.account_id).bind(body.asset_id).bind(body.quantity).bind(body.avg_cost).bind(&today)
      .execute(&s.pool).await?;
     let row = sqlx::query_as::<_, PositionOut>(
-        "SELECT account_id, asset_id, quantity * 1.0 as quantity, avg_cost, last_price, value_usd * 1.0 as value_usd, as_of FROM positions WHERE account_id=?1 AND asset_id=?2",
+        "SELECT p.account_id, p.asset_id, p.quantity * 1.0 as quantity, p.avg_cost,
+                a.last_price as last_price,
+                p.quantity * COALESCE(a.last_price, 0) as value_usd,
+                p.as_of
+         FROM positions p
+         JOIN assets a ON a.id = p.asset_id
+         WHERE p.account_id=?1 AND p.asset_id=?2",
     ).bind(body.account_id).bind(body.asset_id).fetch_one(&s.pool).await?;
     Ok((StatusCode::CREATED, Json(row)))
 }
@@ -587,12 +598,14 @@ pub struct TriggerResult {
 }
 
 pub async fn trigger_snapshot_json(State(s): State<AppState>) -> Result<Json<TriggerResult>, AppError> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    // Anchored to first-of-month so this matches the pricefeed's monthly cadence.
+    let anchor = chrono::Utc::now().format("%Y-%m-01").to_string();
     let result = sqlx::query(
         "INSERT INTO snapshots(as_of, account_id, asset_id, quantity, price_usd, value_usd, source)
-         SELECT ?1, p.account_id, p.asset_id, p.quantity, p.last_price, p.quantity * COALESCE(p.last_price, 0), 'api'
-         FROM positions p WHERE p.quantity > 0
+         SELECT ?1, p.account_id, p.asset_id, p.quantity, a.last_price, p.quantity * COALESCE(a.last_price, 0), 'api'
+         FROM positions p JOIN assets a ON a.id = p.asset_id
+         WHERE p.quantity > 0
          ON CONFLICT(as_of, account_id, asset_id) DO UPDATE SET quantity=excluded.quantity, price_usd=excluded.price_usd, value_usd=excluded.value_usd",
-    ).bind(&today).execute(&s.pool).await?;
-    Ok(Json(TriggerResult { date: today, snapshots_created: result.rows_affected() }))
+    ).bind(&anchor).execute(&s.pool).await?;
+    Ok(Json(TriggerResult { date: anchor, snapshots_created: result.rows_affected() }))
 }

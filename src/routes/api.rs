@@ -672,7 +672,7 @@ pub async fn stocks_holdings(
         "SELECT a.symbol, ac.name,
                 p.quantity * 1.0,
                 COALESCE(p.avg_cost * 1.0, 0.0),
-                COALESCE(p.last_price * 1.0, 0.0)
+                COALESCE(a.last_price * 1.0, 0.0)
          FROM positions p
          JOIN assets a ON a.id = p.asset_id
          JOIN accounts ac ON ac.id = p.account_id
