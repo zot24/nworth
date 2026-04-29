@@ -74,6 +74,10 @@ pub struct ExpenseRow {
     pub place: String,
     pub notes: String,
     pub category_id: Option<i64>,
+    /// Mirror of `category_id` flattened to 0 when None, so the template's
+    /// `c.id == e.selected_category_id` comparison works without askama
+    /// needing to deref an Option.
+    pub selected_category_id: i64,
     pub category_name: String,
     pub label_ids_csv: String,
     pub labels_display: String,
@@ -111,6 +115,16 @@ pub struct DataQuery {
     pub tab: Option<String>,
     pub asset_type: Option<String>,
     pub as_of: Option<String>,
+    /// Year filter for income + expenses tabs ("YYYY" or "all").
+    pub year: Option<String>,
+}
+
+/// One pickable year + whether it's the active selection. Pre-built in the
+/// handler so the template doesn't have to compare String to &String (askama
+/// doesn't support String == &String / `*` deref in expressions).
+pub struct YearOption {
+    pub year: String,
+    pub selected: bool,
 }
 
 #[derive(Template)]
@@ -136,6 +150,9 @@ struct DataTemplate {
     labels: Vec<LabelRow>,
     snapshot_dates: Vec<String>,
     selected_date: String,
+    year_all_selected: bool,
+    income_year_options: Vec<YearOption>,
+    expense_year_options: Vec<YearOption>,
 }
 
 pub async fn index(
@@ -144,6 +161,35 @@ pub async fn index(
 ) -> Result<impl IntoResponse, AppError> {
     let tab = q.tab.unwrap_or_else(|| "assets".to_string());
     let selected_asset_type = q.asset_type.unwrap_or_default();
+
+    // Year filter (income + expenses tabs). "all" or absent → no filter.
+    // Bound by valid YYYY pattern to keep the SQL clean.
+    let year_filter: Option<String> = q.year.as_deref()
+        .filter(|y| *y != "all" && y.len() == 4 && y.chars().all(|c| c.is_ascii_digit()))
+        .map(|y| y.to_string());
+    let (year_lo, year_hi) = match &year_filter {
+        Some(y) => (format!("{y}-01-01"), format!("{y}-12-31")),
+        None => ("0000-01-01".to_string(), "9999-12-31".to_string()),
+    };
+    let year_all_selected = year_filter.is_none();
+
+    // Distinct years for each pickable tab — used to render the year picker.
+    let income_years: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT SUBSTR(as_of, 1, 4) AS y FROM income ORDER BY y DESC",
+    ).fetch_all(&state.pool).await?;
+    let expense_years: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT SUBSTR(as_of, 1, 4) AS y FROM expenses ORDER BY y DESC",
+    ).fetch_all(&state.pool).await?;
+    let to_options = |years: Vec<String>| -> Vec<YearOption> {
+        years.into_iter()
+            .map(|y| YearOption {
+                selected: year_filter.as_deref() == Some(y.as_str()),
+                year: y,
+            })
+            .collect()
+    };
+    let income_year_options = to_options(income_years);
+    let expense_year_options = to_options(expense_years);
 
     // Assets — all types including 'owned'. The /data editor is the one place
     // where assets are created and edited; owned things (Car, Apartment, …)
@@ -245,11 +291,13 @@ pub async fn index(
         })
         .collect();
 
-    // Income
+    // Income — filtered by year when set; the LIMIT 60 cap stays only when "all".
     let inc_rows: Vec<(i64, String, f64, f64, f64, Option<String>)> = sqlx::query_as(
         "SELECT id, as_of, salary_usd * 1.0, bonus_usd * 1.0, taxes_usd * 1.0, company
-         FROM income ORDER BY as_of DESC LIMIT 60",
-    ).fetch_all(&state.pool).await?;
+         FROM income
+         WHERE as_of >= ?1 AND as_of <= ?2
+         ORDER BY as_of DESC LIMIT 240",
+    ).bind(&year_lo).bind(&year_hi).fetch_all(&state.pool).await?;
     let income_rows: Vec<IncomeRow> = inc_rows.into_iter()
         .map(|(id, as_of, salary_usd, bonus_usd, taxes_usd, company)| IncomeRow {
             id, as_of, salary_usd, bonus_usd, taxes_usd,
@@ -283,7 +331,8 @@ pub async fn index(
         })
         .collect();
 
-    // Expenses with category + labels (LEFT JOIN; aggregate label IDs/names per row)
+    // Expenses with category + labels (LEFT JOIN; aggregate label IDs/names per row).
+    // Filtered by year when set.
     let exp_rows: Vec<(i64, String, f64, Option<String>, Option<String>, Option<i64>, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT e.id, e.as_of, e.amount_usd * 1.0, e.place, e.notes, e.category_id, c.name,
                 GROUP_CONCAT(el.label_id),
@@ -292,11 +341,13 @@ pub async fn index(
          LEFT JOIN categories c ON c.id = e.category_id
          LEFT JOIN expense_labels el ON el.expense_id = e.id
          LEFT JOIN labels l ON l.id = el.label_id
-         GROUP BY e.id ORDER BY e.as_of DESC LIMIT 60",
-    ).fetch_all(&state.pool).await?;
+         WHERE e.as_of >= ?1 AND e.as_of <= ?2
+         GROUP BY e.id ORDER BY e.as_of DESC LIMIT 240",
+    ).bind(&year_lo).bind(&year_hi).fetch_all(&state.pool).await?;
     let expense_rows: Vec<ExpenseRow> = exp_rows.into_iter()
         .map(|(id, as_of, amount_usd, place, notes, cat_id, cat_name, lab_ids, lab_names)| ExpenseRow {
             id, as_of, amount_usd,
+            selected_category_id: cat_id.unwrap_or(0),
             place: place.unwrap_or_default(),
             notes: notes.unwrap_or_default(),
             category_id: cat_id,
@@ -338,5 +389,6 @@ pub async fn index(
         income_rows, expense_rows, target_groups,
         categories, labels,
         snapshot_dates, selected_date,
+        year_all_selected, income_year_options, expense_year_options,
     })
 }
