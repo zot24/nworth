@@ -25,9 +25,25 @@
     {% if is_categories %}<a href="/data?tab=categories" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;">categories</a>{% endif %}
     {% if is_labels %}<a href="/data?tab=labels" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none; color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600;">labels</a>{% endif %}
     <span style="flex: 1;"></span>
-    <a href="/data?tab=assets" style="padding: 8px 14px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none; opacity: 0.7; {% if is_assets %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600; opacity: 1;{% else %}color: var(--text-muted);{% endif %}" title="Catalog of asset metadata — rarely needed directly">assets</a>
-    <a href="/data?tab=snapshots&as_of={{ selected_date }}" style="padding: 8px 14px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none; opacity: 0.7; {% if is_snapshots %}color: var(--text); border-bottom: 2px solid var(--text); margin-bottom: -2px; font-weight: 600; opacity: 1;{% else %}color: var(--text-muted);{% endif %}" title="Raw point-in-time valuations — rarely edited directly">snapshots</a>
+    {# Assets + snapshots tucked behind a single "advanced" disclosure on the
+       right edge. Native <details> handles toggle + a11y; closes on outside
+       click via the inline script below. #}
+    <details class="adv-tabs" style="position: relative; margin-bottom: -2px;">
+        <summary class="adv-tabs-trigger" style="list-style: none; cursor: pointer; padding: 8px 14px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); user-select: none; {% if is_assets || is_snapshots %}color: var(--text); border-bottom: 2px solid var(--text); font-weight: 600;{% endif %}">advanced <span style="font-size: 0.5rem;">▾</span></summary>
+        <div class="adv-tabs-menu" style="position: absolute; top: calc(100% + 6px); right: 0; min-width: 160px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px 0; z-index: 10;">
+            <a href="/data?tab=assets" style="display: block; padding: 8px 14px; font-size: 0.8125rem; text-decoration: none; color: {% if is_assets %}var(--text); font-weight: 600{% else %}var(--text-secondary){% endif %};">assets <span style="color: var(--text-muted); font-size: 0.6875rem;">— catalog</span></a>
+            <a href="/data?tab=snapshots&as_of={{ selected_date }}" style="display: block; padding: 8px 14px; font-size: 0.8125rem; text-decoration: none; color: {% if is_snapshots %}var(--text); font-weight: 600{% else %}var(--text-secondary){% endif %};">snapshots <span style="color: var(--text-muted); font-size: 0.6875rem;">— raw values</span></a>
+        </div>
+    </details>
 </div>
+<script>
+// Close the "advanced" disclosure when clicking outside it.
+document.addEventListener('click', e => {
+    document.querySelectorAll('details.adv-tabs[open]').forEach(d => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+    });
+});
+</script>
 
 <!-- ═══════ ASSETS TAB ═══════ -->
 {% if is_assets %}
