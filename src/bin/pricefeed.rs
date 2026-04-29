@@ -124,10 +124,20 @@ async fn run_cycle(pool: &SqlitePool, cg_key: Option<&str>) -> Result<()> {
     }
 
     // --- 4. Update positions with latest prices ---
+    // positions.last_price + value_usd are kept live on every cycle so any
+    // page-level "live valuation" computation reads fresh numbers without
+    // needing a fresh snapshot row.
     update_positions(pool).await?;
 
-    // --- 5. Create daily snapshots from positions ---
-    create_snapshots(pool, &today).await?;
+    // --- 5. Create / update the *current month's* snapshot ---
+    // The snapshot's as_of is anchored to the first day of the current month,
+    // so each cycle re-runs the same row (UNIQUE(as_of, account_id, asset_id)
+    // + ON CONFLICT DO UPDATE). Net effect: one snapshot per (month, account,
+    // asset), continuously refreshed with live prices throughout the month
+    // and naturally "frozen" once the next month starts and a new anchor row
+    // is created. No daily-row accumulation, no separate prune step needed.
+    let month_anchor = Utc::now().format("%Y-%m-01").to_string();
+    create_snapshots(pool, &month_anchor).await?;
 
     tracing::info!("price fetch cycle complete");
     Ok(())
