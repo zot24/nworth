@@ -15,8 +15,8 @@
             <th>Name</th>
             <th>Type</th>
             <th>Institution</th>
-            <th>Chain</th>
             <th>Notes</th>
+            <th>Chain</th>
         </tr>
     </thead>
     <tbody>
@@ -25,8 +25,8 @@
             <td class="name"><a href="/accounts/{{ a.id }}" style="color: var(--text); text-decoration: underline;">{{ a.name }}</a></td>
             <td class="label">{{ a.type_code }}</td>
             <td class="label">{{ a.institution.as_deref().unwrap_or("\u{2014}") }}</td>
-            <td class="label">{{ a.chain_code.as_deref().unwrap_or("\u{2014}") }}</td>
             <td class="label">{{ a.notes.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">{{ a.chain_code.as_deref().unwrap_or("\u{2014}") }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -43,6 +43,8 @@
             <th>Institution</th>
             <th class="r">Latest balance</th>
             <th>As of</th>
+            <th>Notes</th>
+            <th>Chain</th>
         </tr>
     </thead>
     <tbody>
@@ -53,6 +55,8 @@
             <td class="label">{{ o.account.institution.as_deref().unwrap_or("\u{2014}") }}</td>
             <td class="r" style="font-variant-numeric: tabular-nums;">{% match o.latest_value_usd %}{% when Some with (v) %}${{ "{:.0}"|format(v) }}{% when None %}<span class="muted">—</span>{% endmatch %}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ o.latest_as_of.as_deref().unwrap_or("never") }}</td>
+            <td class="label">{{ o.account.notes.as_deref().unwrap_or("\u{2014}") }}</td>
+            <td class="label">{{ o.account.chain_code.as_deref().unwrap_or("\u{2014}") }}</td>
         </tr>
         {% endfor %}
     </tbody>
