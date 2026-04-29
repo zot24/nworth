@@ -41,7 +41,6 @@
             <th class="r">Price</th>
             <th class="r">Value</th>
             <th>Risk</th>
-            <th class="r">Target %</th>
         </tr>
     </thead>
     <tbody>
@@ -62,20 +61,10 @@
                 <span style="color: var(--text-secondary);">{{ h.risk_code }}</span>
                 {% endif %}
             </td>
-            <td class="r">
-                {% if h.target_pct > 0.0 %}{{ "{:.0}"|format(h.target_pct * 100.0) }}%{% else %}—{% endif %}
-            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-<hr>
-
-<div class="chart-box">
-    <h3>Actual vs Target</h3>
-    <canvas id="target-chart" height="80"></canvas>
-</div>
 
 <script>
 (async () => {
@@ -131,34 +120,6 @@
         },
     });
 
-    // Actual vs Target allocation
-    const totalCrypto = [{{ safe_value }}, {{ medium_value }}, {{ high_value }}].reduce((a, b) => a + b, 0);
-    const targetTokens = [];
-    {% for h in holdings %}
-    {% if h.target_pct > 0.0 %}
-    targetTokens.push({ symbol: '{{ h.symbol }}', actual: {{ h.value_usd }} / totalCrypto * 100, target: {{ h.target_pct }} * 100 });
-    {% endif %}
-    {% endfor %}
-
-    if (targetTokens.length > 0) {
-        new Chart(document.getElementById('target-chart'), {
-            type: 'bar',
-            data: {
-                labels: targetTokens.map(t => t.symbol),
-                datasets: [
-                    { label: 'Actual %', data: targetTokens.map(t => t.actual), backgroundColor: '#2563eb40', borderColor: '#2563eb', borderWidth: 1.5, borderRadius: 1 },
-                    { label: 'Target %', data: targetTokens.map(t => t.target), backgroundColor: '#7c3aed40', borderColor: '#7c3aed', borderWidth: 1.5, borderRadius: 1 },
-                ],
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    x: { ticks: { color: getThemeColors().tick, font: { family: "'IBM Plex Mono', monospace" } }, grid: { display: false }, border: { display: false } },
-                    y: { ticks: { color: getThemeColors().tick, callback: v => v + '%' }, grid: { color: getThemeColors().grid }, border: { display: false } },
-                },
-            },
-        });
-    }
 })();
 </script>
 {% endblock %}

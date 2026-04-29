@@ -13,7 +13,7 @@ struct AssetsTemplate {
 pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     let assets = sqlx::query_as::<_, Asset>(
         "SELECT id, symbol, name, type_code, chain_code, risk_code,
-                coingecko_id, yahoo_ticker, target_pct, is_stable, active
+                coingecko_id, yahoo_ticker, is_stable, active
          FROM assets
          WHERE active = 1
          ORDER BY type_code, symbol",

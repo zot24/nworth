@@ -16,7 +16,6 @@
             <th>Type</th>
             <th>Chain</th>
             <th>Risk</th>
-            <th class="r">Target %</th>
         </tr>
     </thead>
     <tbody>
@@ -33,12 +32,6 @@
                         {% else if r == "cat2_medium" %}<span class="risk-medium">Medium</span>
                         {% else if r == "cat3_high" %}<span class="risk-high">High</span>
                         {% else %}{{ r }}{% endif %}
-                    {% when None %}&mdash;
-                {% endmatch %}
-            </td>
-            <td class="r">
-                {% match a.target_pct %}
-                    {% when Some with (v) %}{{ "{:.1}"|format(v * 100.0) }}%
                     {% when None %}&mdash;
                 {% endmatch %}
             </td>

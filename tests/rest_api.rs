@@ -139,7 +139,7 @@ async fn assets_crud_lifecycle() {
     // Create
     let (status, val) = json_req(
         &app, "POST", "/api/v1/assets",
-        Some(r#"{"symbol":"BTC","type_code":"crypto","coingecko_id":"bitcoin","risk_code":"cat1_safe","target_pct":0.7}"#),
+        Some(r#"{"symbol":"BTC","type_code":"crypto","coingecko_id":"bitcoin","risk_code":"cat1_safe"}"#),
     ).await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(val["symbol"], "BTC");
@@ -150,7 +150,7 @@ async fn assets_crud_lifecycle() {
     // Update
     let (status, val) = json_req(
         &app, "PUT", &format!("/api/v1/assets/{id}"),
-        Some(r#"{"symbol":"BTC","type_code":"crypto","name":"Bitcoin","target_pct":0.8}"#),
+        Some(r#"{"symbol":"BTC","type_code":"crypto","name":"Bitcoin"}"#),
     ).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(val["name"], "Bitcoin");

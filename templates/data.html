@@ -109,7 +109,6 @@ document.addEventListener('click', e => {
             </div>
             <div class="form-field"><label>CoinGecko ID</label><input name="coingecko_id" style="width: 140px;"></div>
             <div class="form-field"><label>Yahoo</label><input name="yahoo_ticker" style="width: 80px;"></div>
-            <div class="form-field"><label>Target %</label><input name="target_pct" type="number" step="0.01" style="width: 80px;"></div>
         </div>
         <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.5rem 0 0;"><span class="neg">*</span> required. Use this only when you want to track an asset's metadata without a holding (e.g. a stock you're researching). Smart delete: an unused asset is permanently removed; one with snapshots/positions/transactions is marked inactive instead.</p>
         <div class="form-actions"><a class="primary" onclick="this.closest('form').submit()">save</a> <a onclick="this.closest('details').open=false">cancel</a></div>
@@ -121,7 +120,7 @@ document.addEventListener('click', e => {
     <thead>
         <tr>
             <th>ID</th><th>Symbol</th><th>Name</th><th>Type</th><th>Chain</th>
-            <th>Risk</th><th>CoinGecko</th><th>Yahoo</th><th class="r">Target %</th>
+            <th>Risk</th><th>CoinGecko</th><th>Yahoo</th>
             <th>Stable</th><th>Active</th>
             <th style="width: 40px;"><button class="lock-toggle" onclick="toggleLock()" title="Edit"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></button></th>
         </tr>
@@ -137,7 +136,6 @@ document.addEventListener('click', e => {
             <td class="label">{{ a.risk_code }}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ a.coingecko_id }}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ a.yahoo_ticker }}</td>
-            <td class="r">{% if a.target_pct > 0.0 %}{{ "{:.0}"|format(a.target_pct * 100.0) }}%{% endif %}</td>
             <td class="label">{% if a.is_stable == 1 %}yes{% endif %}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td></td>
@@ -167,7 +165,6 @@ document.addEventListener('click', e => {
             </td>
             <td><input name="coingecko_id" value="{{ a.coingecko_id }}" class="edit-input" style="width: 110px; font-size: 0.75rem;"></td>
             <td><input name="yahoo_ticker" value="{{ a.yahoo_ticker }}" class="edit-input" style="width: 70px; font-size: 0.75rem;"></td>
-            <td class="r"><input name="target_pct" type="number" step="0.01" min="0" max="1" value="{% if a.target_pct > 0.0 %}{{ "{:.2}"|format(a.target_pct) }}{% endif %}" class="edit-input" style="width: 60px; text-align: right;"></td>
             <td>
                 <label style="font-size: 0.6875rem; color: var(--text-muted);">
                     <input name="is_stable" type="checkbox" value="on"{% if a.is_stable == 1 %} checked{% endif %}>

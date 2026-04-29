@@ -11,7 +11,6 @@ pub struct Asset {
     pub risk_code: Option<String>,
     pub coingecko_id: Option<String>,
     pub yahoo_ticker: Option<String>,
-    pub target_pct: Option<f64>,
     pub is_stable: i64,
     pub active: i64,
 }

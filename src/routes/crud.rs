@@ -142,8 +142,6 @@ pub struct AssetForm {
     risk_code: Option<String>,
     coingecko_id: Option<String>,
     yahoo_ticker: Option<String>,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    target_pct: Option<f64>,
     is_stable: Option<String>, // "on" or missing
 }
 
@@ -154,8 +152,8 @@ pub async fn create_asset(
     let is_stable: i64 = if f.is_stable.is_some() { 1 } else { 0 };
     sqlx::query(
         "INSERT INTO assets(symbol, name, type_code, chain_code, risk_code,
-                             coingecko_id, yahoo_ticker, target_pct, is_stable, active)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,1)",
+                             coingecko_id, yahoo_ticker, is_stable, active)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1)",
     )
     .bind(&f.symbol)
     .bind(nullable(&f.name))
@@ -164,7 +162,6 @@ pub async fn create_asset(
     .bind(nullable(&f.risk_code))
     .bind(nullable(&f.coingecko_id))
     .bind(nullable(&f.yahoo_ticker))
-    .bind(f.target_pct)
     .bind(is_stable)
     .execute(&state.pool)
     .await?;
@@ -179,8 +176,8 @@ pub async fn update_asset(
     let is_stable: i64 = if f.is_stable.is_some() { 1 } else { 0 };
     sqlx::query(
         "UPDATE assets SET symbol=?1, name=?2, type_code=?3, chain_code=?4, risk_code=?5,
-                coingecko_id=?6, yahoo_ticker=?7, target_pct=?8, is_stable=?9
-         WHERE id=?10",
+                coingecko_id=?6, yahoo_ticker=?7, is_stable=?8
+         WHERE id=?9",
     )
     .bind(&f.symbol)
     .bind(nullable(&f.name))
@@ -189,7 +186,6 @@ pub async fn update_asset(
     .bind(nullable(&f.risk_code))
     .bind(nullable(&f.coingecko_id))
     .bind(nullable(&f.yahoo_ticker))
-    .bind(f.target_pct)
     .bind(is_stable)
     .bind(id)
     .execute(&state.pool)

@@ -12,7 +12,6 @@ pub struct CryptoHolding {
     pub price_usd: f64,
     pub value_usd: f64,
     pub risk_code: String,
-    pub target_pct: f64,
 }
 
 #[derive(Template)]
@@ -54,8 +53,7 @@ pub async fn index(State(state): State<AppState>) -> Result<impl IntoResponse, A
             "SELECT s.id, a.symbol, s.quantity,
                     COALESCE(s.price_usd, 0) AS price_usd,
                     s.value_usd,
-                    COALESCE(a.risk_code, 'unknown') AS risk_code,
-                    COALESCE(a.target_pct * 1.0, 0.0) AS target_pct
+                    COALESCE(a.risk_code, 'unknown') AS risk_code
              FROM snapshots s
              JOIN assets a ON a.id = s.asset_id
              WHERE s.as_of = ?1 AND a.type_code = 'crypto'
