@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Serif monogram "n" — matches the Libre Baskerville hero typography
+       used on the dashboard. Rounded square frame echoes the app modal /
+       severity-pill border-radius. Falls back to Georgia / Times when
+       Libre Baskerville isn't available locally. -->
+  <rect width="32" height="32" rx="6" fill="#111"/>
+  <text x="16" y="23" font-family="'Libre Baskerville', Georgia, 'Times New Roman', serif"
+        font-size="22" font-weight="400" fill="#fafafa" text-anchor="middle">n</text>
+</svg>
