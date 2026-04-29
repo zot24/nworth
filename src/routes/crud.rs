@@ -142,18 +142,16 @@ pub struct AssetForm {
     risk_code: Option<String>,
     coingecko_id: Option<String>,
     yahoo_ticker: Option<String>,
-    is_stable: Option<String>, // "on" or missing
 }
 
 pub async fn create_asset(
     State(state): State<AppState>,
     Form(f): Form<AssetForm>,
 ) -> Result<Redirect, AppError> {
-    let is_stable: i64 = if f.is_stable.is_some() { 1 } else { 0 };
     sqlx::query(
         "INSERT INTO assets(symbol, name, type_code, chain_code, risk_code,
-                             coingecko_id, yahoo_ticker, is_stable, active)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1)",
+                             coingecko_id, yahoo_ticker, active)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,1)",
     )
     .bind(&f.symbol)
     .bind(nullable(&f.name))
@@ -162,7 +160,6 @@ pub async fn create_asset(
     .bind(nullable(&f.risk_code))
     .bind(nullable(&f.coingecko_id))
     .bind(nullable(&f.yahoo_ticker))
-    .bind(is_stable)
     .execute(&state.pool)
     .await?;
     Ok(Redirect::to("/data?tab=assets"))
@@ -173,11 +170,10 @@ pub async fn update_asset(
     Path(id): Path<i64>,
     Form(f): Form<AssetForm>,
 ) -> Result<Redirect, AppError> {
-    let is_stable: i64 = if f.is_stable.is_some() { 1 } else { 0 };
     sqlx::query(
         "UPDATE assets SET symbol=?1, name=?2, type_code=?3, chain_code=?4, risk_code=?5,
-                coingecko_id=?6, yahoo_ticker=?7, is_stable=?8
-         WHERE id=?9",
+                coingecko_id=?6, yahoo_ticker=?7
+         WHERE id=?8",
     )
     .bind(&f.symbol)
     .bind(nullable(&f.name))
@@ -186,7 +182,6 @@ pub async fn update_asset(
     .bind(nullable(&f.risk_code))
     .bind(nullable(&f.coingecko_id))
     .bind(nullable(&f.yahoo_ticker))
-    .bind(is_stable)
     .bind(id)
     .execute(&state.pool)
     .await?;
@@ -579,8 +574,8 @@ pub async fn track_holding(
             ).bind(&symbol).bind(&type_code).fetch_optional(&state.pool).await? {
                 Some(id) => id,
                 None => sqlx::query_scalar(
-                    "INSERT INTO assets(symbol, name, type_code, chain_code, is_stable, active)
-                     VALUES(?1, ?2, ?3, ?4, 0, 1) RETURNING id",
+                    "INSERT INTO assets(symbol, name, type_code, chain_code, active)
+                     VALUES(?1, ?2, ?3, ?4, 1) RETURNING id",
                 )
                 .bind(&symbol)
                 .bind(f.asset_name.as_deref().filter(|v| !v.is_empty()))

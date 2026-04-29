@@ -454,11 +454,41 @@
 
     function toggleLock() {
         document.body.classList.toggle('editing');
+        const editing = document.body.classList.contains('editing');
         document.querySelectorAll('.lock-toggle').forEach(btn => {
-            const editing = document.body.classList.contains('editing');
             btn.classList.toggle('unlocked', editing);
             btn.innerHTML = editing ? ICON_UNLOCK : ICON_LOCK;
         });
+        // Optional companion "Save all" button is shown only while editing.
+        const saveAllBtn = document.getElementById('save-all-btn');
+        if (saveAllBtn) saveAllBtn.style.display = editing ? '' : 'none';
+    }
+
+    /**
+     * Bulk-save every visible edit-row by POSTing each one's inputs to its
+     * data-action URL. Sequential fire-and-fetch (so server-side redirects
+     * are absorbed), then we reload to render the saved state. Replaces
+     * having to click the per-row check on every line.
+     */
+    async function saveAllRows(redirectTo) {
+        const rows = Array.from(document.querySelectorAll('tr.edit-row[data-action]'));
+        for (const tr of rows) {
+            const data = new URLSearchParams();
+            tr.querySelectorAll('input, select, textarea').forEach(el => {
+                if (el.disabled || !el.name) return;
+                if (el.type === 'checkbox' && !el.checked) return;
+                data.append(el.name, el.value);
+            });
+            try {
+                await fetch(tr.dataset.action, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: data.toString(),
+                    redirect: 'manual',
+                });
+            } catch (e) { console.error('save-all row failed', e); }
+        }
+        window.location.assign(redirectTo || window.location.pathname + window.location.search);
     }
 
     // Submit a row's inputs as a form POST

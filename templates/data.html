@@ -121,8 +121,15 @@ document.addEventListener('click', e => {
         <tr>
             <th>ID</th><th>Symbol</th><th>Name</th><th>Type</th><th>Chain</th>
             <th>Risk</th><th>CoinGecko</th><th>Yahoo</th>
-            <th>Stable</th><th>Active</th>
-            <th style="width: 40px;"><button class="lock-toggle" onclick="toggleLock()" title="Edit"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></button></th>
+            <th>Active</th>
+            <th style="width: 40px; white-space: nowrap;">
+                <button class="lock-toggle" onclick="toggleLock()" title="Edit">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                </button>
+                <button class="row-action" onclick="saveAllRows('/data?tab=assets')" title="Save all changed rows" style="display: none;" id="save-all-btn">
+                    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+            </th>
         </tr>
     </thead>
     <tbody>
@@ -133,10 +140,9 @@ document.addEventListener('click', e => {
             <td class="label">{{ a.name }}</td>
             <td class="label">{{ a.type_code }}</td>
             <td class="label">{{ a.chain_code }}</td>
-            <td class="label">{{ a.risk_code }}</td>
+            <td class="label">{% if a.risk_code == "cat1_safe" %}<span class="risk-safe">Safe</span>{% else if a.risk_code == "cat2_medium" %}<span class="risk-medium">Medium</span>{% else if a.risk_code == "cat3_high" %}<span class="risk-high">High</span>{% else %}—{% endif %}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ a.coingecko_id }}</td>
             <td class="label" style="font-size: 0.6875rem;">{{ a.yahoo_ticker }}</td>
-            <td class="label">{% if a.is_stable == 1 %}yes{% endif %}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td></td>
         </tr>
@@ -165,11 +171,6 @@ document.addEventListener('click', e => {
             </td>
             <td><input name="coingecko_id" value="{{ a.coingecko_id }}" class="edit-input" style="width: 110px; font-size: 0.75rem;"></td>
             <td><input name="yahoo_ticker" value="{{ a.yahoo_ticker }}" class="edit-input" style="width: 70px; font-size: 0.75rem;"></td>
-            <td>
-                <label style="font-size: 0.6875rem; color: var(--text-muted);">
-                    <input name="is_stable" type="checkbox" value="on"{% if a.is_stable == 1 %} checked{% endif %}>
-                </label>
-            </td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td style="white-space: nowrap;">
                 <button class="row-action" onclick="submitRow(this.closest('tr'), this.closest('tr').dataset.action)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>

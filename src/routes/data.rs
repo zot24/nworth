@@ -15,7 +15,6 @@ pub struct AssetRow {
     pub risk_code: String,
     pub coingecko_id: String,
     pub yahoo_ticker: String,
-    pub is_stable: i64,
     pub active: i64,
 }
 
@@ -194,8 +193,8 @@ pub async fn index(
     // where assets are created and edited; owned things (Car, Apartment, …)
     // live alongside crypto/stock/fiat rows here. The type dropdown below
     // therefore needs to include 'owned' so editing doesn't silently flip type.
-    let asset_rows: Vec<(i64, String, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, i64, i64)> = sqlx::query_as(
-        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active
+    let asset_rows: Vec<(i64, String, Option<String>, String, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = sqlx::query_as(
+        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active
          FROM assets ORDER BY active DESC, type_code, symbol",
     )
     .fetch_all(&state.pool)
@@ -204,7 +203,7 @@ pub async fn index(
     let assets: Vec<AssetRow> = asset_rows
         .into_iter()
         .filter(|r| selected_asset_type.is_empty() || r.3 == selected_asset_type)
-        .map(|(id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active)| AssetRow {
+        .map(|(id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active)| AssetRow {
             id, symbol,
             name: name.unwrap_or_default(),
             type_code,
@@ -212,7 +211,7 @@ pub async fn index(
             risk_code: risk_code.unwrap_or_default(),
             coingecko_id: coingecko_id.unwrap_or_default(),
             yahoo_ticker: yahoo_ticker.unwrap_or_default(),
-            is_stable, active,
+            active,
         })
         .collect();
 

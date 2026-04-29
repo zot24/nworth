@@ -117,7 +117,6 @@ pub struct AssetOut {
     pub risk_code: Option<String>,
     pub coingecko_id: Option<String>,
     pub yahoo_ticker: Option<String>,
-    pub is_stable: i64,
     pub active: i64,
 }
 
@@ -130,42 +129,39 @@ pub struct AssetIn {
     pub risk_code: Option<String>,
     pub coingecko_id: Option<String>,
     pub yahoo_ticker: Option<String>,
-    pub is_stable: Option<bool>,
 }
 
 pub async fn list_assets(State(s): State<AppState>) -> Result<Json<Vec<AssetOut>>, AppError> {
     let rows = sqlx::query_as::<_, AssetOut>(
-        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active FROM assets ORDER BY type_code, symbol",
+        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active FROM assets ORDER BY type_code, symbol",
     ).fetch_all(&s.pool).await?;
     Ok(Json(rows))
 }
 
 pub async fn get_asset(State(s): State<AppState>, Path(id): Path<i64>) -> Result<Json<AssetOut>, AppError> {
     let row = sqlx::query_as::<_, AssetOut>(
-        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active FROM assets WHERE id=?1",
+        "SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active FROM assets WHERE id=?1",
     ).bind(id).fetch_one(&s.pool).await?;
     Ok(Json(row))
 }
 
 pub async fn create_asset_json(State(s): State<AppState>, Json(body): Json<AssetIn>) -> Result<(StatusCode, Json<AssetOut>), AppError> {
-    let is_stable: i64 = if body.is_stable.unwrap_or(false) { 1 } else { 0 };
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO assets(symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1) RETURNING id",
+        "INSERT INTO assets(symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active) VALUES(?1,?2,?3,?4,?5,?6,?7,1) RETURNING id",
     ).bind(&body.symbol).bind(&body.name).bind(&body.type_code).bind(&body.chain_code).bind(&body.risk_code)
-      .bind(&body.coingecko_id).bind(&body.yahoo_ticker).bind(is_stable)
+      .bind(&body.coingecko_id).bind(&body.yahoo_ticker)
       .fetch_one(&s.pool).await?;
-    let row = sqlx::query_as::<_, AssetOut>("SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active FROM assets WHERE id=?1")
+    let row = sqlx::query_as::<_, AssetOut>("SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active FROM assets WHERE id=?1")
         .bind(id).fetch_one(&s.pool).await?;
     Ok((StatusCode::CREATED, Json(row)))
 }
 
 pub async fn update_asset_json(State(s): State<AppState>, Path(id): Path<i64>, Json(body): Json<AssetIn>) -> Result<Json<AssetOut>, AppError> {
-    let is_stable: i64 = if body.is_stable.unwrap_or(false) { 1 } else { 0 };
-    sqlx::query("UPDATE assets SET symbol=?1, name=?2, type_code=?3, chain_code=?4, risk_code=?5, coingecko_id=?6, yahoo_ticker=?7, is_stable=?8 WHERE id=?9")
+    sqlx::query("UPDATE assets SET symbol=?1, name=?2, type_code=?3, chain_code=?4, risk_code=?5, coingecko_id=?6, yahoo_ticker=?7 WHERE id=?8")
         .bind(&body.symbol).bind(&body.name).bind(&body.type_code).bind(&body.chain_code).bind(&body.risk_code)
-        .bind(&body.coingecko_id).bind(&body.yahoo_ticker).bind(is_stable).bind(id)
+        .bind(&body.coingecko_id).bind(&body.yahoo_ticker).bind(id)
         .execute(&s.pool).await?;
-    let row = sqlx::query_as::<_, AssetOut>("SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, is_stable, active FROM assets WHERE id=?1")
+    let row = sqlx::query_as::<_, AssetOut>("SELECT id, symbol, name, type_code, chain_code, risk_code, coingecko_id, yahoo_ticker, active FROM assets WHERE id=?1")
         .bind(id).fetch_one(&s.pool).await?;
     Ok(Json(row))
 }
