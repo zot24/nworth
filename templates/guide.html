@@ -176,7 +176,7 @@
         <h2 id="dashboard">Action Center (Home)</h2>
         <p><code>/</code> — answers "what should I do this week?" not just "what do I own?".</p>
         <ul>
-            <li><strong>Hero block</strong> — Net Worth as the big number, with the 30-day delta below it and a tiny sparkline of the last ~30 days. Three secondary stats: <em>Drift</em> (how far off targets, in pp), <em>Deployed</em> (% of NW working in stocks/crypto/stables), and <em>Mode</em> (active market regime).</li>
+            <li><strong>Hero block</strong> — Net Worth as the big number, with the 30-day delta below it and a tiny sparkline of the last ~30 days. Four secondary stats: <em>Drift</em> (how far off targets, in pp), <em>Deployed</em> (% of NW working in stocks/crypto/stables), <em>Mode</em> (active market regime), and <em>Yield / mo</em> (estimated monthly passive income — see <a href="#yield">Passive Income</a>).</li>
             <li><strong>Action card stack</strong> — top 5 ranked actions (rebalance, concentration trim, stale-snapshot warning). Each has a priority rail color (alert-deep red / amber / blue), a headline, the reasoning, and the dollar amount + buy/sell direction. Ordered by an urgency score 0–100.</li>
             <li><strong>Sentiment strip</strong> — compact one-line view of stocks (VOO) + crypto (BTC) market signals plus the active mode. Click "edit targets" to open <code>/targets</code>.</li>
             <li><strong>Below the fold</strong> — Net Worth by Category combo chart and the three doughnuts (Asset Distribution / Stocks / Crypto). They moved here so the homepage's job is decisions, not display.</li>
@@ -224,7 +224,10 @@
             <li><strong>Stats</strong> — Total Invested, Current Value, Gain/Loss (green/red)</li>
             <li><strong>Table</strong> — Account, Symbol, Type, Shares, Avg Cost, Last Price, Cost Basis, Market Value, Gain/Loss</li>
         </ul>
-        <div class="tip"><strong>Tip:</strong> Click the lock icon to edit shares and average cost directly. Last Price is updated by the pricefeed.</div>
+        <div class="tip"><strong>Editing:</strong> the read-only <code>/positions</code> page links to <a href="/data?tab=positions"><code>/data?tab=positions</code></a> where every row autosaves on change — quantity, avg cost, and <strong>APY %</strong>. Last Price is updated by the pricefeed.</div>
+        <div class="note">
+            <strong>APY is per (account, asset)</strong>, not per asset. The same USD held in Wise yields ~4% while the same USD in Chase yields 0%; USDC at a yield protocol earns while USDC in a cold wallet doesn't. Set the rate per position; the dashboard's <em>Yield / mo</em> stat block rolls them up via <code>/api/yield/summary</code>. See <a href="#yield">Passive Income</a>.
+        </div>
 
         <h2 id="income">Income</h2>
         <p><code>/income</code> — Monthly salary, bonus, and tax tracking.</p>
@@ -233,6 +236,18 @@
             <li><strong>Chart</strong> — grouped bars showing salary / bonus / taxes per month</li>
             <li><strong>Table</strong> — each month with computed Net column. Editable + add new.</li>
         </ul>
+
+        <h2 id="yield">Passive Income (Yield)</h2>
+        <p>Tracked separately from salary/bonus because it's an emergent property of holdings, not a recorded transaction. Each position has an <strong>APY %</strong> field (set on <a href="/data?tab=positions"><code>/data?tab=positions</code></a>); the rest of the system rolls them up.</p>
+        <ul>
+            <li><strong>Per-position</strong> — yield is a property of the (account, asset) pair, not the asset alone. USD-in-Wise yields, USD-in-Chase doesn't; USDC at a yield protocol yields, USDC in a cold wallet doesn't.</li>
+            <li><strong>Annual income</strong> — Σ (<code>position.value_usd × apy_pct / 100</code>) across positions where <code>apy_pct &gt; 0</code>.</li>
+            <li><strong>Dashboard</strong> — the <em>Yield / mo</em> stat block on the home page shows monthly income, % of holdings currently earning, and blended APY.</li>
+            <li><strong>API</strong> — <code><a href="/api/yield/summary">GET /api/yield/summary</a></code> returns the aggregate plus a per-category breakdown (cash / stable_yielding / crypto / stocks).</li>
+        </ul>
+        <div class="note">
+            Yield is <em>orthogonal</em> to allocation targets: a Wise USD position earning 4% is still <code>cash</code> for drift math; a USDC position earning 8% is still <code>stable_yielding</code>. Yield doesn't reshuffle which target bucket a holding sits in — it just adds an income lens on top.
+        </div>
 
         <h2 id="expenses">Expenses</h2>
         <p><code>/expenses</code> — Monthly expense tracking.</p>
@@ -269,7 +284,18 @@
             <li><strong>Chart</strong> — grouped bars comparing your actual % vs the <em>active</em> target %</li>
             <li><strong>Table</strong> — category × <strong>Bull / Crab / Bear</strong> columns. The active column is highlighted.</li>
         </ul>
-        <div class="note">Target percentages are decimals: <code>0.45</code> = 45%. The adjustment calculation is available at <code>/api/allocation/adjustments</code>. See <a href="#sentiment">Market Sentiment</a> for how the active mode is chosen.</div>
+        <p>Editing happens on <a href="/data?tab=targets"><code>/data?tab=targets</code></a>: every cell autosaves on change, and the row at the bottom shows the live <strong>Σ total</strong> per market mode.</p>
+        <div class="note">
+            Target percentages are decimals: <code>0.45</code> = 45%. <strong>The sum per market mode is capped at 100%</strong> — both client-side (the Σ row turns red as you approach the cap) and server-side (an over-cap save is rejected with a toast). The adjustment calculation is available at <code>/api/allocation/adjustments</code>. See <a href="#sentiment">Market Sentiment</a> for how the active mode is chosen.
+        </div>
+        <div class="tip">
+            <strong>Categories are derived from <code>assets.type_code</code>:</strong>
+            <code>stock</code> → <code>stocks</code> ·
+            <code>stable</code> → <code>stable_yielding</code> ·
+            <code>crypto</code> / <code>nft</code> → <code>crypto</code> ·
+            <code>fiat</code> → <code>cash</code>.
+            The mapping lives in <code>src/routes/api.rs</code> and <code>insights.rs</code>. Owned-type assets (Car, Property) are excluded from drift math entirely.
+        </div>
 
         <!-- ═══════════════════════════════════════ -->
         <h2 id="sentiment">Market Sentiment</h2>
@@ -354,17 +380,18 @@
         <h2 id="edit-vs-view">Edit vs View — the rule</h2>
         <p>The app makes a hard separation between editing and visualization:</p>
         <ul>
-            <li><strong><code>/data</code></strong> — the only place where you can add, edit, or delete records.</li>
+            <li><strong><code>/data</code></strong> and <strong><code>/settings</code></strong> — the only places where you can add, edit, or delete records.</li>
             <li><strong>Every other page</strong> — read-only. Charts, tables, signals, and decisions. No edit chrome competing with the data you're trying to interpret.</li>
         </ul>
         <p>Each visualization page links back to its corresponding /data tab via a small <em>"edit in /data →"</em> in the page header. This keeps decision-driving pages clean and makes "where do I edit this?" a single answer instead of a memory test.</p>
 
         <h2 id="data-tabs">Working in /data</h2>
-        <p>Each /data tab follows the same shape:</p>
+        <p>Every editable surface follows the same pattern: <strong>change a field, it saves automatically</strong>. There are no per-row save buttons or bulk-save links — the moment an input loses focus (or a select changes), the row POSTs and a brief green pulse confirms the save. Server rejections (e.g. targets sum &gt; 100%, negative APY) surface as a red toast at the bottom of the screen.</p>
         <ul>
-            <li><strong>+ add row</strong> — collapsed by default at the top. Click to expand the add form.</li>
-            <li><strong>Table</strong> — every record, with a delete link per row.</li>
-            <li><strong>Targets tab</strong> — the only tab with inline editing per cell. Type a value, click ✓ to save.</li>
+            <li><strong>+ add row</strong> — collapsed by default at the top. Click to expand the add form. Adds use explicit <em>save</em> because a partial new row can't autosave.</li>
+            <li><strong>Edit / view rows</strong> — most tabs (assets, accounts, income, expenses) have a paired view-row + edit-row layout. Click the lock icon in the header to toggle into edit mode. After autosave, the view-row syncs in place — no page reload needed.</li>
+            <li><strong>Single-row tables</strong> — positions and targets edit in place. No lock toggle.</li>
+            <li><strong>Targets tab</strong> — each cell is its own autosave scope. The Σ row at the bottom updates live and turns red if a column would exceed 100%; the server rejects over-cap saves regardless.</li>
         </ul>
 
         <h2 id="deleting-records">Smart delete</h2>

@@ -310,12 +310,39 @@
         .pos { color: var(--pos); }
         .neg { color: var(--neg); }
 
-        /* Autosave row-flash — brief pulse so users see a change registered. */
+        /* Autosave row-flash — brief pulse so users see a change registered.
+           Works on any element marked `.autosaved`. For <tr> rows we paint
+           the child <td>s instead because table rendering doesn't fully
+           apply backgrounds to the row itself. Other containers (spans, divs,
+           forms) get the animation directly. */
         @keyframes autosave-flash {
             0%   { background-color: color-mix(in srgb, var(--pos) 25%, transparent); }
             100% { background-color: transparent; }
         }
         tr.autosaved > td { animation: autosave-flash 0.7s ease-out; }
+        :not(tr).autosaved { animation: autosave-flash 0.7s ease-out; }
+
+        /* Autosave error toast — bottom-center notice when the server rejects
+           a save (e.g. targets sum > 100%). Auto-dismisses; harmless if the
+           user keeps editing. Pointer-events stay live so the user can click
+           through it to dismiss faster. */
+        .autosave-toast {
+            position: fixed; left: 50%; bottom: 24px;
+            transform: translateX(-50%) translateY(8px);
+            background: var(--neg); color: #fff;
+            padding: 10px 18px; border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif; font-size: 0.8125rem;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+            max-width: 480px;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+            z-index: 1000;
+        }
+        .autosave-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: auto;
+        }
 
         /* Confirm modal — replaces native window.confirm so destructive
            prompts inherit the site's typography, palette, and dark-mode tokens. */
@@ -469,43 +496,180 @@
     }
 
     /**
-     * Autosave: any change to an input/select/textarea inside a row marked
-     * `tr.edit-row[data-action]` (or `tr[data-autosave]`) immediately POSTs
-     * the row's named fields to its action URL. No per-row save click, no
-     * bulk save click — change a field, it saves.
+     * Autosave: any change to an input/select/textarea inside an element
+     * marked `data-autosave="<url>"` (or the legacy `tr.edit-row[data-action]`
+     * shape used by paired view/edit rows) immediately POSTs the container's
+     * named fields to its action URL. No per-row save click, no bulk save
+     * click — change a field, it saves.
+     *
+     * Containers can be table rows, spans, divs, forms — anything. The
+     * `tr.edit-row[data-action]` form is kept for the original paired
+     * row pattern; everything else uses the simpler `data-autosave` attr.
      *
      * Wired via document-level event delegation so newly rendered rows
      * (after a reload, after a redirect) automatically pick up the
      * behavior without re-binding per page.
      */
     document.addEventListener('change', e => {
-        const tr = e.target.closest('tr.edit-row[data-action], tr[data-autosave]');
-        if (!tr) return;
+        const container = e.target.closest('tr.edit-row[data-action], [data-autosave]');
+        if (!container) return;
         if (!e.target.matches('input, select, textarea')) return;
         if (e.target.disabled) return;
-        autosaveRow(tr);
+        autosaveRow(container);
     });
 
-    async function autosaveRow(tr) {
-        const action = tr.dataset.action || tr.dataset.autosave;
+    async function autosaveRow(container) {
+        const action = container.dataset.action || container.dataset.autosave;
         if (!action) return;
         const data = new URLSearchParams();
-        tr.querySelectorAll('input, select, textarea').forEach(el => {
+        container.querySelectorAll('input, select, textarea').forEach(el => {
             if (el.disabled || !el.name) return;
             if (el.type === 'checkbox' && !el.checked) return;
             data.append(el.name, el.value);
         });
+        let response;
         try {
-            await fetch(action, {
+            response = await fetch(action, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: data.toString(),
                 redirect: 'manual',
             });
+        } catch (e) {
+            // Network-level failure (offline, DNS, etc.). Tell the user
+            // rather than silently swallowing.
+            console.error('autosave fetch failed', e);
+            showAutosaveToast('Couldn’t reach the server. Try again.');
+            return;
+        }
+
+        // `redirect: manual` makes a 303 surface as type=opaqueredirect with
+        // status=0 / ok=false — that's the success path for legacy form
+        // handlers. Real success otherwise = 2xx. Anything else is a server
+        // rejection that the user needs to see.
+        const succeeded = response.ok || response.type === 'opaqueredirect';
+        if (succeeded) {
+            // Reflect the saved values in the paired view-row so the user
+            // doesn't need to reload to see fresh data. (Containers that
+            // aren't paired edit-rows — single-row autosave tables, spans,
+            // forms — fall through harmlessly.)
+            syncViewRowFromEdit(container);
             // Brief pulse so the user knows something happened.
-            tr.classList.add('autosaved');
-            setTimeout(() => tr.classList.remove('autosaved'), 700);
-        } catch (e) { console.error('autosave failed', e); }
+            container.classList.add('autosaved');
+            setTimeout(() => container.classList.remove('autosaved'), 700);
+            return;
+        }
+
+        // 4xx/5xx — read the error body for a useful message. We deliberately
+        // don't revert the input value: the user just typed it, and seeing
+        // their value next to the error is easier to fix than a silent revert.
+        let msg = 'Save rejected.';
+        try {
+            const body = (await response.text()).trim();
+            if (body) msg = body;
+        } catch {}
+        showAutosaveToast(msg);
+    }
+
+    /**
+     * One-at-a-time toast for autosave failures. Replaces its own contents on
+     * each call so a flurry of rejections doesn't pile up. Auto-dismisses
+     * after ~4.5s; clicking dismisses immediately.
+     */
+    function showAutosaveToast(message) {
+        let toast = document.getElementById('autosave-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'autosave-toast';
+            toast.className = 'autosave-toast';
+            toast.addEventListener('click', () => toast.classList.remove('show'));
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        // Force reflow so re-adding 'show' replays the slide-in animation.
+        void toast.offsetWidth;
+        toast.classList.add('show');
+        clearTimeout(toast._dismissTimer);
+        toast._dismissTimer = setTimeout(() => toast.classList.remove('show'), 4500);
+    }
+
+    /**
+     * After autosave, mirror the edit-row's input values into its paired
+     * view-row (`tr.view-row` immediately preceding `tr.edit-row`). Each
+     * /data tab declares the binding on view-row cells via:
+     *   - data-bind="<input-name>"        — required, names the matching
+     *                                       input/select inside the edit-row
+     *   - data-format="<formatter>"        — optional, see applyBoundCell
+     *
+     * Cells without data-bind are left untouched (e.g. read-only columns
+     * like ID and Active). Single-row autosave tables (positions) just
+     * fall through here harmlessly.
+     */
+    function syncViewRowFromEdit(editTr) {
+        const viewTr = editTr.previousElementSibling;
+        if (!viewTr || !viewTr.classList.contains('view-row')) return;
+        viewTr.querySelectorAll('[data-bind]').forEach(cell => {
+            const name = cell.dataset.bind;
+            const el = editTr.querySelector('[name="' + CSS.escape(name) + '"]');
+            if (!el) return;
+            applyBoundCell(cell, el, cell.dataset.format || '');
+        });
+    }
+
+    function applyBoundCell(cell, el, fmt) {
+        const value = el.value;
+        if (fmt === 'usd' || fmt === 'usd-or-empty') {
+            const n = parseFloat(value);
+            const showZero = fmt === 'usd';
+            if (!isFinite(n) || (!showZero && n <= 0)) {
+                cell.textContent = '';
+            } else {
+                cell.textContent = '$' + n.toLocaleString(undefined, {
+                    minimumFractionDigits: 2, maximumFractionDigits: 2,
+                });
+            }
+            return;
+        }
+        if (fmt === 'risk') {
+            const map = {
+                'cat1_safe':   ['risk-safe',   'Safe'],
+                'cat2_medium': ['risk-medium', 'Medium'],
+                'cat3_high':   ['risk-high',   'High'],
+            };
+            cell.textContent = '';
+            if (map[value]) {
+                const span = document.createElement('span');
+                span.className = map[value][0];
+                span.textContent = map[value][1];
+                cell.appendChild(span);
+            } else {
+                cell.textContent = '—';
+            }
+            return;
+        }
+        if (fmt === 'role') {
+            cell.textContent = '';
+            if (value === 'investment' || !value) {
+                cell.textContent = value || '';
+            } else {
+                const span = document.createElement('span');
+                span.style.color = 'var(--info-ink)';
+                span.textContent = value;
+                cell.appendChild(span);
+            }
+            return;
+        }
+        if (fmt === 'select-text') {
+            if (el.tagName === 'SELECT') {
+                const opt = el.options[el.selectedIndex];
+                cell.textContent = opt ? opt.textContent.trim() : value;
+            } else {
+                cell.textContent = value;
+            }
+            return;
+        }
+        // Default: plain copy as text.
+        cell.textContent = value;
     }
 
     function deleteRow(action, label) {

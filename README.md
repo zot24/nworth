@@ -73,22 +73,30 @@ The app makes a hard separation: **`/data` is the only place anything mutates**.
 Long-format throughout — adding a new asset is a row, never a schema change.
 
 ```
-accounts (id, name, type_code, institution, chain_code, active, notes)
+accounts (id, name, type_code, institution, chain_code, active, notes, role)
+                                         ← role: investment | operating | property
 assets (id, symbol, name, type_code, chain_code, risk_code,
-        coingecko_id, yahoo_ticker, target_pct, is_stable, active)
+        coingecko_id, yahoo_ticker, last_price, active)
 snapshots (id, as_of, account_id, asset_id, quantity, price_usd,
            value_usd, source)            ← UNIQUE(as_of, account, asset)
-positions (account_id, asset_id, quantity, avg_cost, last_price,
-           value_usd, as_of)             ← current state
+positions (account_id, asset_id, quantity, avg_cost, apy_pct, as_of)
+                                         ← current state. last_price + value_usd
+                                            are derived from a JOIN on assets
+                                            at read time. apy_pct is per (account,
+                                            asset): same asset can yield differently
+                                            in different accounts (Wise USD vs Chase
+                                            USD, USDC at a yield protocol vs cold).
 price_history (asset_id, as_of, price_usd, source)
 fx_rates (ccy, as_of, rate_usd)
 allocation_targets (id, category, market_mode, target_pct, notes)
-                                         ← bull / crab / bear per category
+                                         ← bull / crab / bear per category;
+                                            sum per market_mode is enforced ≤ 100%
 income (id, as_of, salary_usd, bonus_usd, taxes_usd, ...)
 expenses (id, as_of, amount_usd, place, notes, category_id)
 categories (id, name, parent_id, color, active)  ← hierarchical
 labels (id, name, color, active)
 expense_labels (expense_id, label_id)
+settings (key, value, updated_at)        ← app-level prefs (display_currency, …)
 transactions (...)                       ← schema present, light usage
 ```
 
@@ -103,6 +111,7 @@ GET /api/insights/concentration    ← top-1 / top-3 / HHI
 GET /api/insights/networth/deltas  ← 7d / 30d / 90d / YTD
 GET /api/insights/actions          ← ranked action list, urgency 0-100
 GET /api/insights/wealth           ← unified holdings for /wealth
+GET /api/yield/summary             ← passive income aggregated from positions.apy_pct
 GET /api/market/sentiment          ← 50/200 SMA per representative asset
 GET /api/expenses/by-category      ← spending donut grouped by category
 ```
@@ -117,7 +126,7 @@ What it does each cycle:
 - Pulls crypto prices (CoinGecko) for assets with a `coingecko_id`
 - Pulls stock prices (Yahoo) for assets with a `yahoo_ticker`
 - Pulls FX rates for non-USD currencies in use
-- Updates `positions.last_price` for live holdings
+- Updates `assets.last_price` for live holdings (positions read it via a JOIN)
 - Appends to `price_history` (used by the 50/200-day SMA logic)
 
 Run it manually (`--once`), on a loop (`--loop SECONDS`), or schedule via cron / systemd / docker-compose.

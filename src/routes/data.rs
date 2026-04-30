@@ -40,6 +40,7 @@ pub struct PositionRow {
     pub avg_cost: f64,
     pub last_price: f64,
     pub value_usd: f64,
+    pub apy_pct: f64,
 }
 
 #[derive(Debug)]
@@ -144,6 +145,9 @@ struct DataTemplate {
     income_rows: Vec<IncomeRow>,
     expense_rows: Vec<ExpenseRow>,
     target_groups: Vec<TargetGroupRow>,
+    target_total_bull: f64,
+    target_total_crab: f64,
+    target_total_bear: f64,
     categories: Vec<CategoryRow>,
     labels: Vec<LabelRow>,
     snapshot_dates: Vec<String>,
@@ -248,11 +252,12 @@ pub async fn index(
         .collect();
 
     // Positions
-    let pos_rows: Vec<(String, String, i64, i64, f64, f64, f64, f64)> = sqlx::query_as(
+    let pos_rows: Vec<(String, String, i64, i64, f64, f64, f64, f64, f64)> = sqlx::query_as(
         "SELECT ac.name, a.symbol, p.account_id, p.asset_id,
                 p.quantity * 1.0, COALESCE(p.avg_cost * 1.0, 0.0),
                 COALESCE(a.last_price * 1.0, 0.0),
-                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd
+                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd,
+                p.apy_pct * 1.0
          FROM positions p
          JOIN accounts ac ON ac.id = p.account_id
          JOIN assets a ON a.id = p.asset_id
@@ -263,8 +268,8 @@ pub async fn index(
 
     let positions: Vec<PositionRow> = pos_rows
         .into_iter()
-        .map(|(account_name, asset_symbol, account_id, asset_id, quantity, avg_cost, last_price, value_usd)| PositionRow {
-            account_name, asset_symbol, account_id, asset_id, quantity, avg_cost, last_price, value_usd,
+        .map(|(account_name, asset_symbol, account_id, asset_id, quantity, avg_cost, last_price, value_usd, apy_pct)| PositionRow {
+            account_name, asset_symbol, account_id, asset_id, quantity, avg_cost, last_price, value_usd, apy_pct,
         })
         .collect();
 
@@ -371,6 +376,11 @@ pub async fn index(
     let target_groups: Vec<TargetGroupRow> = group_map.into_iter()
         .map(|(category, (b, c, br))| TargetGroupRow { category, bull_pct: b, crab_pct: c, bear_pct: br })
         .collect();
+    // Per-mode column totals — server-rendered as the initial Σ row; the
+    // targets template's inline JS recomputes live on input changes.
+    let target_total_bull = target_groups.iter().map(|g| g.bull_pct).sum::<f64>();
+    let target_total_crab = target_groups.iter().map(|g| g.crab_pct).sum::<f64>();
+    let target_total_bear = target_groups.iter().map(|g| g.bear_pct).sum::<f64>();
 
     Ok(DataTemplate {
         is_assets: tab == "assets",
@@ -384,6 +394,7 @@ pub async fn index(
         is_labels: tab == "labels",
         assets, snapshots, positions, accounts,
         income_rows, expense_rows, target_groups,
+        target_total_bull, target_total_crab, target_total_bear,
         categories, labels,
         snapshot_dates, selected_date,
         year_all_selected, income_year_options, expense_year_options,

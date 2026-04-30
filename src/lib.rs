@@ -67,6 +67,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/stocks/normalized", get(routes::api::stocks_normalized))
         .route("/api/allocation/adjustments", get(routes::api::allocation_adjustments))
         .route("/api/stables/apy", get(routes::api::stables_apy))
+        .route("/api/yield/summary", get(routes::api::yield_summary))
         .route("/api/market/sentiment", get(routes::api::market_sentiment))
         // Insights — Action Center analytics
         .route("/api/insights/summary", get(routes::insights::summary))

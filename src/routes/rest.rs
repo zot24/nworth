@@ -236,6 +236,7 @@ pub struct PositionOut {
     pub avg_cost: Option<f64>,
     pub last_price: Option<f64>,
     pub value_usd: f64,
+    pub apy_pct: f64,
     pub as_of: String,
 }
 
@@ -245,6 +246,9 @@ pub struct PositionIn {
     pub asset_id: i64,
     pub quantity: f64,
     pub avg_cost: Option<f64>,
+    /// Annual percentage yield (percent). Optional; defaults to 0 on insert,
+    /// preserved on update when omitted.
+    pub apy_pct: Option<f64>,
 }
 
 pub async fn list_positions(State(s): State<AppState>) -> Result<Json<Vec<PositionOut>>, AppError> {
@@ -253,6 +257,7 @@ pub async fn list_positions(State(s): State<AppState>) -> Result<Json<Vec<Positi
         "SELECT p.account_id, p.asset_id, p.quantity * 1.0 as quantity, p.avg_cost,
                 a.last_price as last_price,
                 p.quantity * COALESCE(a.last_price, 0) as value_usd,
+                p.apy_pct * 1.0 as apy_pct,
                 p.as_of
          FROM positions p
          JOIN assets a ON a.id = p.asset_id
@@ -262,16 +267,27 @@ pub async fn list_positions(State(s): State<AppState>) -> Result<Json<Vec<Positi
 }
 
 pub async fn upsert_position(State(s): State<AppState>, Json(body): Json<PositionIn>) -> Result<(StatusCode, Json<PositionOut>), AppError> {
+    if let Some(rate) = body.apy_pct {
+        if !rate.is_finite() || rate < 0.0 {
+            return Err(AppError::BadRequest("apy_pct must be ≥ 0".into()));
+        }
+    }
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     sqlx::query(
-        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, as_of) VALUES(?1,?2,?3,?4,?5)
-         ON CONFLICT(account_id, asset_id) DO UPDATE SET quantity=excluded.quantity, avg_cost=excluded.avg_cost, as_of=excluded.as_of",
-    ).bind(body.account_id).bind(body.asset_id).bind(body.quantity).bind(body.avg_cost).bind(&today)
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, apy_pct, as_of)
+         VALUES(?1,?2,?3,?4, COALESCE(?5, 0.0), ?6)
+         ON CONFLICT(account_id, asset_id) DO UPDATE SET
+           quantity = excluded.quantity,
+           avg_cost = excluded.avg_cost,
+           apy_pct  = COALESCE(?5, positions.apy_pct),
+           as_of    = excluded.as_of",
+    ).bind(body.account_id).bind(body.asset_id).bind(body.quantity).bind(body.avg_cost).bind(body.apy_pct).bind(&today)
      .execute(&s.pool).await?;
     let row = sqlx::query_as::<_, PositionOut>(
         "SELECT p.account_id, p.asset_id, p.quantity * 1.0 as quantity, p.avg_cost,
                 a.last_price as last_price,
                 p.quantity * COALESCE(a.last_price, 0) as value_usd,
+                p.apy_pct * 1.0 as apy_pct,
                 p.as_of
          FROM positions p
          JOIN assets a ON a.id = p.asset_id

@@ -878,6 +878,95 @@ pub async fn stables_apy(
 }
 
 #[derive(Serialize)]
+pub struct YieldByCategory {
+    pub category: String,
+    pub yielding_value_usd: f64,
+    pub annual_income_usd: f64,
+}
+
+#[derive(Serialize)]
+pub struct YieldSummary {
+    /// Annual passive income across all positions where apy_pct > 0,
+    /// computed as Σ (position.value_usd × position.apy_pct / 100).
+    pub annual_income_usd: f64,
+    pub monthly_income_usd: f64,
+    /// Combined value of all yielding positions (where apy_pct > 0).
+    pub yielding_value_usd: f64,
+    /// Combined value of all positions (denominator for the % view).
+    pub total_position_value_usd: f64,
+    /// `yielding_value / total_position_value` — what share of holdings is
+    /// currently working. Returns 0.0 if there are no holdings.
+    pub yielding_share: f64,
+    /// Effective blended APY across yielding positions only
+    /// (`annual_income / yielding_value × 100`). Useful headline number.
+    pub blended_apy_pct: f64,
+    /// Per-category breakdown using the same asset-type → category mapping
+    /// the rest of the app uses (stocks/stable_yielding/crypto/cash, plus
+    /// pass-through for owned/other).
+    pub by_category: Vec<YieldByCategory>,
+}
+
+/// GET /api/yield/summary — passive-income view from per-position APY rates.
+pub async fn yield_summary(
+    State(state): State<AppState>,
+) -> Result<Json<YieldSummary>, AppError> {
+    let rows: Vec<(String, f64, f64)> = sqlx::query_as(
+        "SELECT a.type_code,
+                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd,
+                p.apy_pct * 1.0
+         FROM positions p
+         JOIN assets a ON a.id = p.asset_id",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut total_value = 0.0;
+    let mut yielding_value = 0.0;
+    let mut annual_income = 0.0;
+    let mut by_cat: std::collections::BTreeMap<String, (f64, f64)> = std::collections::BTreeMap::new();
+
+    for (type_code, value, apy) in rows {
+        total_value += value;
+        if apy > 0.0 && value > 0.0 {
+            let income = value * apy / 100.0;
+            yielding_value += value;
+            annual_income += income;
+            // Same mapping as elsewhere in the app — see audit comment in
+            // api.rs::networth_by_category and insights.rs.
+            let category = match type_code.as_str() {
+                "stock" => "stocks".to_string(),
+                "stable" => "stable_yielding".to_string(),
+                "crypto" | "nft" => "crypto".to_string(),
+                "fiat" => "cash".to_string(),
+                other => other.to_string(),
+            };
+            let entry = by_cat.entry(category).or_insert((0.0, 0.0));
+            entry.0 += value;
+            entry.1 += income;
+        }
+    }
+
+    let by_category: Vec<YieldByCategory> = by_cat.into_iter()
+        .map(|(category, (yv, ai))| YieldByCategory {
+            category, yielding_value_usd: yv, annual_income_usd: ai,
+        })
+        .collect();
+
+    let yielding_share = if total_value > 0.0 { yielding_value / total_value } else { 0.0 };
+    let blended_apy_pct = if yielding_value > 0.0 { annual_income / yielding_value * 100.0 } else { 0.0 };
+
+    Ok(Json(YieldSummary {
+        annual_income_usd: annual_income,
+        monthly_income_usd: annual_income / 12.0,
+        yielding_value_usd: yielding_value,
+        total_position_value_usd: total_value,
+        yielding_share,
+        blended_apy_pct,
+        by_category,
+    }))
+}
+
+#[derive(Serialize)]
 pub struct NormalizedHolding {
     pub symbol: String,
     pub original_symbol: String,

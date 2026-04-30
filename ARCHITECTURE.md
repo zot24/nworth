@@ -193,42 +193,55 @@ All methods use ON CONFLICT upsert — UNIQUE(as_of, account_id, asset_id).
 ├────────────────────────────────────────────────────────┤
 │ id, symbol (UNIQUE w/ type_code), name, type_code (FK),│
 │ chain_code, risk_code, coingecko_id, yahoo_ticker,     │
-│ target_pct, is_stable, active                          │
+│ last_price, active                                     │
+│ (last_price is updated by the pricefeed; positions     │
+│ read it via JOIN — it's not stored on positions.)      │
 │ CRUD: /api/v1/assets + /assets page + /data page       │
 └────────────────────────────────────────────────────────┘
 
-┌──────────────────────┐  ┌──────────────────────┐
-│      positions       │  │    transactions      │
-│  (current holdings)  │  │  (dividends, etc.)   │
-├──────────────────────┤  ├──────────────────────┤
-│ PK(account_id,       │  │ id, ts, account_id,  │
-│    asset_id)         │  │ asset_id, kind,      │
-│ quantity, avg_cost,  │  │ quantity, price_usd, │
-│ last_price, value_usd│  │ fee_usd, notes       │
-│ as_of                │  │ 103 dividend rows    │
-│ Updated by pricefeed │  └──────────────────────┘
-└──────────────────────┘
+┌──────────────────────────┐  ┌──────────────────────┐
+│        positions         │  │    transactions      │
+│   (current holdings)     │  │  (dividends, etc.)   │
+├──────────────────────────┤  ├──────────────────────┤
+│ PK(account_id, asset_id) │  │ id, ts, account_id,  │
+│ quantity, avg_cost,      │  │ asset_id, kind,      │
+│ apy_pct, as_of           │  │ quantity, price_usd, │
+│                          │  │ fee_usd, notes       │
+│ apy_pct is per (account, │  │ 103 dividend rows    │
+│ asset) so the same asset │  └──────────────────────┘
+│ can yield at different   │
+│ rates in different accts │
+│ (Wise USD vs Chase USD). │
+│ value_usd / last_price   │
+│ are derived via JOIN on  │
+│ assets at read time.     │
+└──────────────────────────┘
 
-┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
-│    income    │ │   expenses   │ │ allocation_targets│
-├──────────────┤ ├──────────────┤ ├──────────────────┤
-│ id, as_of,   │ │ id, as_of,   │ │ id, category,    │
-│ salary_usd,  │ │ amount_usd,  │ │ target_pct,      │
-│ bonus_usd,   │ │ place, notes │ │ notes             │
-│ taxes_usd,   │ │              │ │                   │
-│ company      │ │ 73 rows      │ │ stocks: 45%      │
-│ 74 rows      │ └──────────────┘ │ stable: 43%      │
-└──────────────┘                   │ crypto: 5%       │
-                                   │ cash: 5%         │
-┌──────────────┐ ┌──────────────┐ │ car: 2%          │
-│price_history │ │   fx_rates   │ └──────────────────┘
-├──────────────┤ ├──────────────┤
-│ PK(asset_id, │ │ PK(ccy,      │
+┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐
+│    income    │ │   expenses   │ │  allocation_targets  │
+├──────────────┤ ├──────────────┤ ├──────────────────────┤
+│ id, as_of,   │ │ id, as_of,   │ │ id, category,        │
+│ salary_usd,  │ │ amount_usd,  │ │ market_mode,         │
+│ bonus_usd,   │ │ place, notes │ │ target_pct, notes    │
+│ taxes_usd,   │ │              │ │                      │
+│ company      │ │ 73 rows      │ │ UNIQUE(category,     │
+│ 74 rows      │ └──────────────┘ │        market_mode)  │
+└──────────────┘                   │ Σ per market_mode is │
+                                   │ enforced ≤ 100% on   │
+                                   │ /targets/new.        │
+┌──────────────┐ ┌──────────────┐ │ Categories: stocks / │
+│price_history │ │   fx_rates   │ │ stable_yielding /    │
+├──────────────┤ ├──────────────┤ │ crypto / cash.       │
+│ PK(asset_id, │ │ PK(ccy,      │ └──────────────────────┘
 │    as_of)    │ │    as_of)    │
-│ price_usd,   │ │ rate_usd,    │
-│ source       │ │ source       │
-│ By pricefeed │ │ 3 rows       │
-└──────────────┘ └──────────────┘
+│ price_usd,   │ │ rate_usd,    │ ┌──────────────────────┐
+│ source       │ │ source       │ │      settings        │
+│ By pricefeed │ │ 3 rows       │ ├──────────────────────┤
+└──────────────┘ └──────────────┘ │ key (PK), value,     │
+                                   │ updated_at           │
+                                   │ App-level prefs      │
+                                   │ (display_currency).  │
+                                   └──────────────────────┘
 ```
 
 ---
@@ -256,7 +269,8 @@ Computation                           API endpoint                    Status
 Current value per category            /api/networth/by-category       ✓
 Desired % per category                /api/v1/targets                 ✓
 Adjustment $ to hit targets           /api/allocation/adjustments     ✓
-Stable Yielding APY                   /api/stables/apy                ✓
+Stable Yielding APY (legacy, fixed 6%) /api/stables/apy                ✓
+Passive income (per-position APY)     /api/yield/summary              ✓
 Monthly/quarterly/yearly dividends    /api/stocks/dividends/*         ✓
 YoY dividend growth                   /api/stocks/dividends/yearly    ✓
 Per-holding details + P&L             /api/stocks/holdings            ✓

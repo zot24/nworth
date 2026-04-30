@@ -18,6 +18,8 @@ pub struct PositionRow {
     pub cost_basis: f64,
     pub market_value: f64,
     pub gain_loss: f64,
+    pub apy_pct: f64,
+    pub annual_yield_usd: f64,
 }
 
 #[derive(Template)]
@@ -31,10 +33,11 @@ struct PositionsTemplate {
 pub async fn index(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
     // last_price now lives on assets, computed value (qty × last_price) is
     // derived in SQL so the template doesn't need to know about the schema move.
-    let rows: Vec<(i64, i64, String, String, String, f64, f64, f64, f64)> = sqlx::query_as(
+    let rows: Vec<(i64, i64, String, String, String, f64, f64, f64, f64, f64)> = sqlx::query_as(
         "SELECT p.account_id, p.asset_id, ac.name, a.symbol, a.type_code,
                 p.quantity * 1.0, COALESCE(p.avg_cost * 1.0, 0.0), COALESCE(a.last_price * 1.0, 0.0),
-                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd
+                p.quantity * COALESCE(a.last_price, 0.0) AS value_usd,
+                p.apy_pct * 1.0
          FROM positions p
          JOIN accounts ac ON ac.id = p.account_id
          JOIN assets a ON a.id = p.asset_id
@@ -46,10 +49,11 @@ pub async fn index(State(state): State<AppState>) -> Result<impl IntoResponse, A
     let positions: Vec<PositionRow> = rows
         .into_iter()
         .map(
-            |(account_id, asset_id, account_name, symbol, type_code, quantity, avg_cost, last_price, _value_usd)| {
+            |(account_id, asset_id, account_name, symbol, type_code, quantity, avg_cost, last_price, _value_usd, apy_pct)| {
                 let cost_basis = quantity * avg_cost;
                 let market_value = quantity * last_price;
                 let gain_loss = market_value - cost_basis;
+                let annual_yield_usd = market_value * apy_pct / 100.0;
                 PositionRow {
                     account_id,
                     asset_id,
@@ -63,6 +67,8 @@ pub async fn index(State(state): State<AppState>) -> Result<impl IntoResponse, A
                     cost_basis,
                     market_value,
                     gain_loss,
+                    apy_pct,
+                    annual_yield_usd,
                 }
             },
         )

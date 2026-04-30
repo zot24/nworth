@@ -129,13 +129,13 @@ document.addEventListener('click', e => {
         {% for a in assets %}
         <tr class="view-row" style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
             <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
-            <td class="name" style="font-family: 'IBM Plex Mono', monospace;">{{ a.symbol }}</td>
-            <td class="label">{{ a.name }}</td>
-            <td class="label">{{ a.type_code }}</td>
-            <td class="label">{{ a.chain_code }}</td>
-            <td class="label">{% if a.risk_code == "cat1_safe" %}<span class="risk-safe">Safe</span>{% else if a.risk_code == "cat2_medium" %}<span class="risk-medium">Medium</span>{% else if a.risk_code == "cat3_high" %}<span class="risk-high">High</span>{% else %}—{% endif %}</td>
-            <td class="label" style="font-size: 0.6875rem;">{{ a.coingecko_id }}</td>
-            <td class="label" style="font-size: 0.6875rem;">{{ a.yahoo_ticker }}</td>
+            <td class="name" data-bind="symbol" style="font-family: 'IBM Plex Mono', monospace;">{{ a.symbol }}</td>
+            <td class="label" data-bind="name">{{ a.name }}</td>
+            <td class="label" data-bind="type_code">{{ a.type_code }}</td>
+            <td class="label" data-bind="chain_code">{{ a.chain_code }}</td>
+            <td class="label" data-bind="risk_code" data-format="risk">{% if a.risk_code == "cat1_safe" %}<span class="risk-safe">Safe</span>{% else if a.risk_code == "cat2_medium" %}<span class="risk-medium">Medium</span>{% else if a.risk_code == "cat3_high" %}<span class="risk-high">High</span>{% else %}—{% endif %}</td>
+            <td class="label" data-bind="coingecko_id" style="font-size: 0.6875rem;">{{ a.coingecko_id }}</td>
+            <td class="label" data-bind="yahoo_ticker" style="font-size: 0.6875rem;">{{ a.yahoo_ticker }}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
             <td></td>
         </tr>
@@ -314,6 +314,7 @@ function toggleAssetMode(sel) {
             <th>Account</th><th>Asset</th>
             <th class="r">Quantity</th><th class="r">Avg Cost</th>
             <th class="r">Last Price</th><th class="r">Value USD</th>
+            <th class="r" title="Annual yield rate (e.g. 4 = 4% APY). Per-position because the same asset can yield differently depending on where it lives — USD in Wise vs USD in Chase, USDC at a yield protocol vs USDC in cold storage.">APY %</th>
             <th></th>
         </tr>
     </thead>
@@ -330,6 +331,9 @@ function toggleAssetMode(sel) {
             </td>
             <td class="r muted">${{ "{:.2}"|format(p.last_price) }}</td>
             <td class="r" style="font-weight: 500;">${{ "{:.2}"|format(p.value_usd) }}</td>
+            <td class="r">
+                <input name="apy_pct" class="edit-input" type="number" step="0.01" min="0" value="{{ "{:.2}"|format(p.apy_pct) }}" style="width: 70px; text-align: right;">
+            </td>
             <td class="actions" style="white-space: nowrap;">
                 <input type="hidden" name="account_id" value="{{ p.account_id }}">
                 <input type="hidden" name="asset_id" value="{{ p.asset_id }}">
@@ -397,13 +401,13 @@ function deletePosition(tr, label) {
         {% for a in accounts %}
         <tr class="view-row" style="{% if a.active == 0 %}opacity: 0.4;{% endif %}">
             <td style="font-size: 0.6875rem;" class="muted">{{ a.id }}</td>
-            <td class="name">{{ a.name }}</td>
-            <td class="label">{{ a.type_code }}</td>
-            <td class="label" style="font-size: 0.6875rem;">{% if a.role == "investment" %}investment{% else %}<span style="color: var(--info-ink);">{{ a.role }}</span>{% endif %}</td>
-            <td class="label">{{ a.institution }}</td>
-            <td class="label">{{ a.chain_code }}</td>
+            <td class="name" data-bind="name">{{ a.name }}</td>
+            <td class="label" data-bind="type_code">{{ a.type_code }}</td>
+            <td class="label" data-bind="role" data-format="role" style="font-size: 0.6875rem;">{% if a.role == "investment" %}investment{% else %}<span style="color: var(--info-ink);">{{ a.role }}</span>{% endif %}</td>
+            <td class="label" data-bind="institution">{{ a.institution }}</td>
+            <td class="label" data-bind="chain_code">{{ a.chain_code }}</td>
             <td>{% if a.active == 1 %}<span class="green">active</span>{% else %}<span class="red">inactive</span>{% endif %}</td>
-            <td class="label" style="font-size: 0.6875rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">{{ a.notes }}</td>
+            <td class="label" data-bind="notes" style="font-size: 0.6875rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">{{ a.notes }}</td>
             <td></td>
         </tr>
         <tr class="edit-row" data-action="/accounts/{{ a.id }}/edit">
@@ -480,11 +484,11 @@ function deletePosition(tr, label) {
         {% for i in income_rows %}
         <tr class="view-row">
             <td style="font-size: 0.6875rem;" class="muted">{{ i.id }}</td>
-            <td>{{ i.as_of }}</td>
-            <td class="r">${{ "{:.2}"|format(i.salary_usd) }}</td>
-            <td class="r">{% if i.bonus_usd > 0.0 %}${{ "{:.2}"|format(i.bonus_usd) }}{% endif %}</td>
-            <td class="r">{% if i.taxes_usd > 0.0 %}${{ "{:.2}"|format(i.taxes_usd) }}{% endif %}</td>
-            <td class="label">{{ i.company }}</td>
+            <td data-bind="as_of">{{ i.as_of }}</td>
+            <td class="r" data-bind="salary_usd" data-format="usd">${{ "{:.2}"|format(i.salary_usd) }}</td>
+            <td class="r" data-bind="bonus_usd" data-format="usd-or-empty">{% if i.bonus_usd > 0.0 %}${{ "{:.2}"|format(i.bonus_usd) }}{% endif %}</td>
+            <td class="r" data-bind="taxes_usd" data-format="usd-or-empty">{% if i.taxes_usd > 0.0 %}${{ "{:.2}"|format(i.taxes_usd) }}{% endif %}</td>
+            <td class="label" data-bind="company">{{ i.company }}</td>
             <td></td>
         </tr>
         <tr class="edit-row" data-action="/income/{{ i.id }}/edit">
@@ -553,10 +557,15 @@ function deletePosition(tr, label) {
         {% for e in expense_rows %}
         <tr class="view-row">
             <td style="font-size: 0.6875rem;" class="muted">{{ e.id }}</td>
-            <td>{{ e.as_of }}</td>
-            <td class="r" style="font-weight: 500;">${{ "{:.2}"|format(e.amount_usd) }}</td>
-            <td class="label">{{ e.place }}</td>
-            <td class="label">{{ e.category_name }}</td>
+            <td data-bind="as_of">{{ e.as_of }}</td>
+            <td class="r" data-bind="amount_usd" data-format="usd" style="font-weight: 500;">${{ "{:.2}"|format(e.amount_usd) }}</td>
+            <td class="label" data-bind="place">{{ e.place }}</td>
+            <td class="label" data-bind="category_id" data-format="select-text">{{ e.category_name }}</td>
+            {# Labels view-cell is intentionally not bound: `labels_display`
+               formats names from a server-side label table that isn't in the
+               DOM. Editing labels still saves; the cell just stays stale until
+               reload. The expenses subsystem is on hold — revisit in the
+               dedicated expenses session. #}
             <td class="label" style="font-size: 0.6875rem;">{{ e.labels_display }}</td>
             <td></td>
         </tr>
@@ -585,10 +594,10 @@ function deletePosition(tr, label) {
 <!-- ═══════ TARGETS TAB ═══════ -->
 {% else if is_targets %}
 
-<p class="secondary" style="font-size: 0.8125rem; margin-bottom: 1rem;">Each row = one category. Edit any cell to set the target % for that market mode (decimals, e.g. <code>0.45</code> = 45%). Saves on click.</p>
+<p class="secondary" style="font-size: 0.8125rem; margin-bottom: 1rem;">Each row = one category. Edit any cell to set the target % for that market mode (decimals, e.g. <code>0.45</code> = 45%). Autosaves on change. Each market mode's column must total ≤ 100%.</p>
 
 <div style="overflow-x: auto;">
-<table>
+<table id="targets-table">
     <thead>
         <tr>
             <th>Category</th>
@@ -601,44 +610,105 @@ function deletePosition(tr, label) {
         {% for g in target_groups %}
         <tr>
             <td class="name">{{ g.category }}</td>
+            {# Each cell is its own autosave scope: a span wrapper carries the
+               POST URL and hidden inputs for the (category, market_mode) keys
+               that the upsert is keyed on. The visible <input> contributes
+               `target_pct`. Same delegation as edit-rows in the other tabs. #}
             <td class="r">
-                <span style="display:inline-flex; gap:4px; align-items:center;">
-                <input class="edit-input" type="number" step="0.01" min="0" max="1" value="{{ "{:.2}"|format(g.bull_pct) }}" data-cat="{{ g.category }}" data-mode="bull" style="width: 70px; text-align: right;">
-                <button class="row-action" type="button" onclick="saveTarget(this)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <span data-autosave="/targets/new" style="display:inline-block;">
+                    <input type="hidden" name="category" value="{{ g.category }}">
+                    <input type="hidden" name="market_mode" value="bull">
+                    <input class="edit-input" type="number" step="0.01" min="0" max="1" name="target_pct" value="{{ "{:.2}"|format(g.bull_pct) }}" style="width: 70px; text-align: right;">
                 </span>
             </td>
             <td class="r">
-                <span style="display:inline-flex; gap:4px; align-items:center;">
-                <input class="edit-input" type="number" step="0.01" min="0" max="1" value="{{ "{:.2}"|format(g.crab_pct) }}" data-cat="{{ g.category }}" data-mode="crab" style="width: 70px; text-align: right;">
-                <button class="row-action" type="button" onclick="saveTarget(this)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <span data-autosave="/targets/new" style="display:inline-block;">
+                    <input type="hidden" name="category" value="{{ g.category }}">
+                    <input type="hidden" name="market_mode" value="crab">
+                    <input class="edit-input" type="number" step="0.01" min="0" max="1" name="target_pct" value="{{ "{:.2}"|format(g.crab_pct) }}" style="width: 70px; text-align: right;">
                 </span>
             </td>
             <td class="r">
-                <span style="display:inline-flex; gap:4px; align-items:center;">
-                <input class="edit-input" type="number" step="0.01" min="0" max="1" value="{{ "{:.2}"|format(g.bear_pct) }}" data-cat="{{ g.category }}" data-mode="bear" style="width: 70px; text-align: right;">
-                <button class="row-action" type="button" onclick="saveTarget(this)" title="Save"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
+                <span data-autosave="/targets/new" style="display:inline-block;">
+                    <input type="hidden" name="category" value="{{ g.category }}">
+                    <input type="hidden" name="market_mode" value="bear">
+                    <input class="edit-input" type="number" step="0.01" min="0" max="1" name="target_pct" value="{{ "{:.2}"|format(g.bear_pct) }}" style="width: 70px; text-align: right;">
                 </span>
             </td>
         </tr>
         {% endfor %}
     </tbody>
+    <tfoot>
+        {# Σ values are wrapped in a span sized to the input box (same width,
+           padding, border, font) so the totals line up vertically with the
+           digits in the input cells above. data-mode-total moves to the span
+           so the recompute JS + .over-limit CSS hit the same element. #}
+        <tr>
+            <td style="padding: 12px 0 8px; border-top: 2px solid var(--border-strong); font-family: 'Source Sans 3', sans-serif; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);">Σ total</td>
+            <td class="r" style="padding: 12px 0 8px; border-top: 2px solid var(--border-strong);">
+                <span data-mode-total="bull" class="target-total">{{ "{:.2}"|format(target_total_bull) }}</span>
+            </td>
+            <td class="r" style="padding: 12px 0 8px; border-top: 2px solid var(--border-strong);">
+                <span data-mode-total="crab" class="target-total">{{ "{:.2}"|format(target_total_crab) }}</span>
+            </td>
+            <td class="r" style="padding: 12px 0 8px; border-top: 2px solid var(--border-strong);">
+                <span data-mode-total="bear" class="target-total">{{ "{:.2}"|format(target_total_bear) }}</span>
+            </td>
+        </tr>
+    </tfoot>
 </table>
 </div>
 
-<script>
-function saveTarget(btn) {
-    const input = btn.parentElement.querySelector('input.edit-input');
-    const f = document.createElement('form');
-    f.method = 'POST'; f.action = '/targets/new'; f.style.display = 'none';
-    const fields = { category: input.dataset.cat, market_mode: input.dataset.mode, target_pct: input.value };
-    Object.entries(fields).forEach(([k, v]) => {
-        const i = document.createElement('input');
-        i.type = 'hidden'; i.name = k; i.value = v;
-        f.appendChild(i);
-    });
-    document.body.appendChild(f);
-    f.submit();
+<style>
+/* Σ totals match the input box footprint so digits line up vertically with
+   the inputs above. Transparent border preserves the same width as the
+   bordered <input> next to it without drawing a visible frame. */
+.target-total {
+    display: inline-block;
+    width: 70px;
+    padding: 3px 6px;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: right;
 }
+/* Σ totals turn red when a column exceeds 100% — same warning palette as
+   negative deltas elsewhere. */
+[data-mode-total].over-limit { color: var(--neg); }
+</style>
+
+<script>
+/**
+ * Live column totals on /data?tab=targets. Triggered on every keystroke
+ * (`input` event), independent of the `change`-driven autosave so the user
+ * sees the running sum before the request goes out and can spot when
+ * they're about to bust the 100% cap.
+ */
+(function () {
+    const table = document.getElementById('targets-table');
+    if (!table) return;
+
+    function recomputeTotals() {
+        const totals = { bull: 0, crab: 0, bear: 0 };
+        table.querySelectorAll('span[data-autosave="/targets/new"]').forEach(span => {
+            const mode = span.querySelector('input[name="market_mode"]')?.value;
+            const pct  = parseFloat(span.querySelector('input[name="target_pct"]')?.value);
+            if (mode in totals && Number.isFinite(pct)) totals[mode] += pct;
+        });
+        ['bull', 'crab', 'bear'].forEach(mode => {
+            const cell = table.querySelector(`[data-mode-total="${mode}"]`);
+            if (!cell) return;
+            cell.textContent = totals[mode].toFixed(2);
+            cell.classList.toggle('over-limit', totals[mode] > 1.0 + 1e-6);
+        });
+    }
+
+    table.addEventListener('input', e => {
+        if (e.target.matches('input[name="target_pct"]')) recomputeTotals();
+    });
+})();
 </script>
 
 <!-- ═══════ CATEGORIES TAB ═══════ -->

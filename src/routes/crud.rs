@@ -409,6 +409,39 @@ pub async fn create_target(
     Form(f): Form<TargetForm>,
 ) -> Result<Redirect, AppError> {
     let mode = f.market_mode.as_deref().unwrap_or("crab");
+
+    // Per-cell sanity check. The UI clamps inputs to [0, 1] but a hand-crafted
+    // POST could still bypass that.
+    if !f.target_pct.is_finite() || f.target_pct < 0.0 || f.target_pct > 1.0 {
+        return Err(AppError::BadRequest(
+            "target_pct must be between 0.00 and 1.00".into(),
+        ));
+    }
+
+    // Cross-row constraint: SUM(target_pct) per market_mode can't exceed 100%.
+    // Exclude the row we're upserting from the existing-sum query so edits
+    // don't double-count the value being replaced.
+    let existing_sum: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(target_pct), 0.0)
+         FROM allocation_targets
+         WHERE market_mode = ?1 AND category != ?2",
+    )
+    .bind(mode)
+    .bind(&f.category)
+    .fetch_one(&state.pool)
+    .await?;
+    let projected = existing_sum + f.target_pct;
+    // Tiny epsilon so floats summing to exactly 1.0 don't trip the check.
+    if projected > 1.0 + 1e-6 {
+        return Err(AppError::BadRequest(format!(
+            "{} {} would push the {} total to {:.0}% — max is 100%.",
+            f.category,
+            mode,
+            mode,
+            projected * 100.0
+        )));
+    }
+
     sqlx::query(
         "INSERT INTO allocation_targets(category, market_mode, target_pct, notes, updated_at)
          VALUES(?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)
@@ -496,6 +529,12 @@ pub struct PositionForm {
     quantity: f64,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     avg_cost: Option<f64>,
+    /// Annual percentage yield, percent (e.g. 4.0 = 4% APY). Optional in the
+    /// payload — autosave on quantity / avg_cost shouldn't have to ship this.
+    /// When absent on UPDATE we keep the existing value via COALESCE; on a
+    /// fresh INSERT it falls through to the column default (0.0).
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    apy_pct: Option<f64>,
     redirect: Option<String>,
 }
 
@@ -503,19 +542,29 @@ pub async fn upsert_position_form(
     State(state): State<AppState>,
     Form(f): Form<PositionForm>,
 ) -> Result<Redirect, AppError> {
+    // Per-cell sanity check for APY: must be finite and non-negative.
+    if let Some(rate) = f.apy_pct {
+        if !rate.is_finite() || rate < 0.0 {
+            return Err(AppError::BadRequest(
+                "apy_pct must be ≥ 0".into(),
+            ));
+        }
+    }
     let today = Utc::now().format("%Y-%m-%d").to_string();
     sqlx::query(
-        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, as_of)
-         VALUES(?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO positions(account_id, asset_id, quantity, avg_cost, apy_pct, as_of)
+         VALUES(?1, ?2, ?3, ?4, COALESCE(?5, 0.0), ?6)
          ON CONFLICT(account_id, asset_id) DO UPDATE SET
            quantity = excluded.quantity,
            avg_cost = COALESCE(excluded.avg_cost, positions.avg_cost),
+           apy_pct  = COALESCE(?5, positions.apy_pct),
            as_of    = excluded.as_of",
     )
     .bind(f.account_id)
     .bind(f.asset_id)
     .bind(f.quantity)
     .bind(f.avg_cost)
+    .bind(f.apy_pct)
     .bind(&today)
     .execute(&state.pool)
     .await?;

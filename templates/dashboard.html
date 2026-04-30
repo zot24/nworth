@@ -45,6 +45,11 @@
             <div class="stat-block-value" id="stat-mode">—</div>
             <div class="stat-block-sub" id="stat-mode-sub"></div>
         </div>
+        <div class="stat-block" title="Estimated monthly passive income from positions with APY > 0. Set rates per-position on /data?tab=positions.">
+            <div class="stat-block-label">Yield / mo</div>
+            <div class="stat-block-value" id="stat-yield">—</div>
+            <div class="stat-block-sub" id="stat-yield-sub"></div>
+        </div>
     </div>
 </div>
 
@@ -141,6 +146,24 @@ function arrow(n) { return n > 0 ? '▲' : (n < 0 ? '▼' : '·'); }
     document.getElementById('stat-drift-sub').textContent = drift < 5 ? 'within tolerance' : drift < 15 ? 'review' : 'rebalance';
 
     document.getElementById('stat-deploy').textContent = (summary.stats.deployment_ratio * 100).toFixed(0) + '%';
+
+    // Passive income stat block — independent fetch (small, separate concern).
+    // Hidden if there's nothing earning yet so the empty state isn't a "$0/mo
+    // 0% yielding" eyesore.
+    fetch('/api/yield/summary').then(r => r.json()).then(y => {
+        const yEl = document.getElementById('stat-yield');
+        const ySub = document.getElementById('stat-yield-sub');
+        if (!yEl) return;
+        if (y.annual_income_usd <= 0) {
+            yEl.textContent = '—';
+            ySub.textContent = 'set APY in /data';
+            return;
+        }
+        yEl.textContent = fmtMoney(y.monthly_income_usd);
+        const sharePct = (y.yielding_share * 100).toFixed(0);
+        const blended = y.blended_apy_pct.toFixed(2);
+        ySub.textContent = `${sharePct}% earning · ${blended}% blended`;
+    }).catch(() => {});
 
     const mode = summary.stats.active_mode.toUpperCase();
     const modeEl = document.getElementById('stat-mode');

@@ -242,6 +242,23 @@ paths:
       responses:
         '204': { description: Deleted }
 
+  # ── Yield (passive income from per-position APY) ──
+  /api/yield/summary:
+    get:
+      summary: Passive-income summary
+      description: |
+        Aggregates per-position APY rates into a portfolio-wide income view.
+        Annual income is computed as Σ (`position.value_usd × position.apy_pct / 100`)
+        across all positions where `apy_pct > 0`. Set rates per position via
+        `POST /api/v1/positions` or the autosave column on `/data?tab=positions`.
+      tags: [Yield]
+      responses:
+        '200':
+          description: Aggregate yield + per-category breakdown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/YieldSummary' }
+
   # ── Income ──
   /api/v1/income:
     get:
@@ -876,6 +893,14 @@ components:
           type: number
           description: "Current total value (quantity x last_price)"
           example: 241918.60
+        apy_pct:
+          type: number
+          description: |
+            Annual percentage yield (percent). Per-position because the same asset
+            can earn different rates depending on where it's held — USD in Wise vs
+            USD in Chase, USDC at a yield protocol vs USDC in cold storage.
+            0 means non-yielding. Drives the /api/yield/summary view.
+          example: 4.0
         as_of:
           type: string
           description: "Date of the last price update"
@@ -910,6 +935,12 @@ components:
           type: number
           description: "Total current value"
           example: 242000.00
+        apy_pct:
+          type: number
+          description: |
+            Annual percentage yield (percent). Optional. Defaults to 0 on insert;
+            preserved on update when omitted. Negative values are rejected.
+          example: 4.0
 
     Income:
       type: object
@@ -1251,3 +1282,48 @@ components:
           items: { type: number }
           description: "Last ~30 daily closes for sparkline."
         price_change_pct_24h: { type: number, nullable: true }
+
+    YieldSummary:
+      type: object
+      description: |
+        Aggregate passive-income view derived from per-position `apy_pct`. Yield is
+        a property of (account, asset) — the same asset can earn different rates
+        depending on where it lives (USD in Wise vs USD in Chase, USDC at a yield
+        protocol vs USDC in cold storage). Set rates per-position; this endpoint
+        rolls them up.
+      properties:
+        annual_income_usd:
+          type: number
+          description: "Σ (position.value_usd × position.apy_pct / 100) across all positions where apy > 0."
+          example: 40.0
+        monthly_income_usd:
+          type: number
+          description: "annual_income_usd / 12."
+          example: 3.33
+        yielding_value_usd:
+          type: number
+          description: "Combined value_usd of all yielding positions (apy_pct > 0)."
+          example: 1000.0
+        total_position_value_usd:
+          type: number
+          description: "Combined value_usd of all positions. Denominator for `yielding_share`."
+          example: 1000.0
+        yielding_share:
+          type: number
+          description: "yielding_value_usd / total_position_value_usd. 0.0 when there are no holdings."
+          example: 1.0
+        blended_apy_pct:
+          type: number
+          description: "Effective blended APY across yielding positions only (annual_income / yielding_value × 100)."
+          example: 4.0
+        by_category:
+          type: array
+          description: "Per-category roll-up using the asset-type → category mapping (stocks / stable_yielding / crypto / cash)."
+          items: { $ref: "#/components/schemas/YieldByCategory" }
+
+    YieldByCategory:
+      type: object
+      properties:
+        category: { type: string, example: "cash" }
+        yielding_value_usd: { type: number, example: 1000.0 }
+        annual_income_usd: { type: number, example: 40.0 }
